@@ -18,6 +18,7 @@ import scala.util.Random
 import scala.collection.immutable.ListMap
 import akka.actor.ActorContext
 import akka.event.LoggingAdapter
+import scala.annotation.tailrec
 
 /**
  * @author mdye
@@ -71,6 +72,7 @@ class Mumbler(val log: LoggingAdapter, val sender: ActorRef, val cluster: ActorR
   def select(occurrences: Map[String, Int]): String = {
     val sum = occurrences.values.reduce(_ + _)
 
+    @tailrec
     def find(i: BigInt, seq: Seq[(String, Int)]): String = {
       val (word, count) = seq.head
 
