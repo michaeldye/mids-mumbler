@@ -19,6 +19,8 @@ Akka-based implementation of Mumbler for MIDS Scaling Up! homework
 
 On first execution, the mumbler will download and preprocess input files while it streams them. This means that the first invocation will take approximately 90 minutes to return. On each subsequent invocation, the mumbler will instruct the agents to download the files again and, if they exist, use the cached copies instead of re-downloading.
 
+**Note**: The organization of data by this program can really eat inodes on an FS. If writing files to GPFS w/ 3x25GB clustered disks, you need to create the filesystem with a lot of inodes, e.g.: ` mmcrfs gpfsfpo -F /root/diskfile.fpo -A yes -Q no -r 1 -R 1 --inode-limit 5M`.
+
 ## Sample output
 
 - `time java -jar mids_mumbler-assembly-0.1.0.jar taco 10`:
