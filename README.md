@@ -9,9 +9,9 @@ Akka-based implementation of Mumbler for MIDS Scaling Up! homework
 
 * Start mumbler agent on each node:
 
-         java -Dakka.remote.netty.tcp.hostname="gpfs1" -Dakka.remote.netty.tcp.port="5441" -jar mids_mumbler-assembly-0.1.0.jar
-         java -Dakka.remote.netty.tcp.hostname="gpfs2" -Dakka.remote.netty.tcp.port="5442" -jar mids_mumbler-assembly-0.1.0.jar
-         java -Dakka.remote.netty.tcp.hostname="gpfs3" -Dakka.remote.netty.tcp.port="5443" -jar mids_mumbler-assembly-0.1.0.jar
+         java -Dakka.remote.netty.tcp.hostname="gpfs1" -Dakka.remote.netty.tcp.port="5441" -jar mids_mumbler_agent-assembly-0.1.0.jar
+         java -Dakka.remote.netty.tcp.hostname="gpfs2" -Dakka.remote.netty.tcp.port="5442" -jar mids_mumbler_agent-assembly-0.1.0.jar
+         java -Dakka.remote.netty.tcp.hostname="gpfs3" -Dakka.remote.netty.tcp.port="5443" -jar mids_mumbler_agent-assembly-0.1.0.jar
 
 * Execute mumbler on head node (gpfs1 in my case), for example, with seed word `fruit` and max chain `10`:
 
