@@ -48,7 +48,7 @@ class Mumbler(val log: LoggingAdapter, val sender: ActorRef, val cluster: ActorR
 
     val cmap = responseRecorder.values
 
-    // only continue 
+    // only continue
     if (cmap.flatten.size == cmap.size) {
       // collect all nodes' response.result Option[Map[String, Int]] maps (like "'word' count") into a single occurrences map and select one to add to the chain
 

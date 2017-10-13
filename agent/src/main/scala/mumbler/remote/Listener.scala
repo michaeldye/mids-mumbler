@@ -19,26 +19,25 @@ object Listener extends App {
 
 class Agent extends Actor with ActorLogging {
   val hostname = if (System.getenv("HOSTNAME") != null) System.getenv("HOSTNAME") else System.getProperty("akka.remote.netty.tcp.hostname")
-  val dir = Paths.get("/gpfs", "gpfsfpo", hostname)
- 
+  val dir = Paths.get(System.getenv("DATADIR"))
+
   override
-  
   def receive = {
     case dl: Download =>
       log.info(s"Received dl '$dl'")
-      
+
       if (Writer.preprocess(dir, dl.target)) {
         sender ! s"processed ${dl.target}"
       } else sender ! s"skipped preprocessing ${dl.target}, file already exists"
     case request: Request =>
       log.info(s"Received request '$request'")
-      
+
       request.cmd match {
-        case Mumble => 
+        case Mumble =>
           log.info(s"Mumbling starting with ${request.arg}")
           val followers: Option[Map[String, Int]] = Searcher.findFollowing(dir, request.arg)
           sender ! Response(request.cmd, request.arg, followers)
-        
+
         case _ =>
           log.info(s"Unexpected command: ${request.cmd}")
       }
