@@ -55,7 +55,7 @@ class Conductor extends Actor with ActorLogging {
 
       mumbler = new Mumbler(log, self, agents:_*)
 
-      mumbler.distribute((0 to 2).map(ix => Download(new URI(s"http://storage.googleapis.com/books/ngrams/books/googlebooks-eng-us-all-2gram-20090715-${ix}.csv.zip"))))
+      mumbler.distribute((0 to 20).map(ix => Download(new URI(s"http://storage.googleapis.com/books/ngrams/books/googlebooks-eng-us-all-2gram-20090715-${ix}.csv.zip"))))
 
       // done preprocessing, now do the mumble
       self ! Control(Mumble, args)
@@ -89,7 +89,7 @@ class Conductor extends Actor with ActorLogging {
   def exit(reason: String) {
     log.info(s"Exiting b/c ${reason}")
     log.info(s"Chain: ${chain.mkString(" ")}")
-    context.system.shutdown()
+    context.system.terminate()
     System.exit(1)
   }
 }
