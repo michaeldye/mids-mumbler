@@ -1,12 +1,12 @@
 lazy val common = Seq(
   organization := "com.tehlulz",
   version := "0.1.0",
-  scalaVersion := "2.11.11",
+  scalaVersion := "2.12.3",
   libraryDependencies ++= Seq(
     "com.typesafe.akka" %% "akka-http" % "10.0.10",
-    "com.typesafe.akka" %% "akka-actor" % "2.5.4",
-    "com.typesafe.akka" %% "akka-remote" % "2.5.4",
-    "com.typesafe.scala-logging" %% "scala-logging" % "3.1.0"
+    "com.typesafe.akka" %% "akka-actor" % "2.5.6",
+    "com.typesafe.akka" %% "akka-remote" % "2.5.6",
+    "com.typesafe.scala-logging" %% "scala-logging" % "3.7.2"
   )
 )
 

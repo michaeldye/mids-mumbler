@@ -20,3 +20,4 @@ bin/
 .cache-main
 .classpath
 .project
+.settings
