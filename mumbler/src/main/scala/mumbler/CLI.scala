@@ -19,48 +19,40 @@ import akka.util.Timeout
  */
 object CLI extends App {
   val system = ActorSystem("Mumbler")
-  val conductor = system.actorOf(Props[Conductor], name = "Conductor")
 
-  if (args.size < 3) {
-    Console.err.println("Usage: java -jar <mids_mumbler-assembly...jar> [seed word] [chain limit] [remoteaddr:port,remoteaddr:port,...]")
+  if (args.size < 4) {
+    Console.err.println("Usage: java -jar <mids_mumbler-assembly...jar> [files max] [seed word] [chain max] [remoteaddr:port,remoteaddr:port,...]")
     System.exit(1)
   }
 
-  conductor ! Control(Preprocess, args)
+  val agents : Seq[(String, Int)] = args.slice(3, args.size).map { ag: String =>
+    val parts = ag.split(":")
+    (parts(0), parts(1).toInt)
+  }
+
+  val conductorActor = system.actorOf(Props(new Conductor(args(0).toInt, args(2).toInt, agents)), name = "Conductor")
+
+  Console.println(s"Conductor setup begun, source files are being processed if not already present. Starting actor system and API.")
+  //TODO: start API listener here, give it a common conductor reference
+  conductorActor ! Control(Mumble, args(1))
 }
 
-class Conductor extends Actor with ActorLogging {
+class Conductor(val filesMax: Int, val chainMax: Int, val agentConf: Seq[(String, Int)]) extends Actor with ActorLogging {
 
-  def remote(host: String, port: Int) = {
+  def remote(host: String, port: Int): ActorRef = {
     val duration = Duration.create(3, TimeUnit.SECONDS)
     implicit val timeout = Timeout(duration)
     Await.result(context.actorSelection(s"akka.tcp://RemoteMumbler@${host}:${port}/user/Agent").resolveOne(), duration)
   }
 
-  var mumbler: Mumbler = _
-  var chain = ListBuffer[String]()
-  var max = 10
+  val mumbler = new Mumbler(log, self, agentConf.map(Function.tupled(remote _)):_*)
+  log.info(s"Preprocessing given agentConf: ${agentConf.mkString(" ")}")
+
+  val last = if (filesMax > 100) 100 else filesMax
+  mumbler.distribute((0 until last).map(ix => Download(new URI(s"http://storage.googleapis.com/books/ngrams/books/googlebooks-eng-us-all-2gram-20090715-${ix}.csv.zip"))))
 
   def receive = {
-    case Control(Preprocess, args) =>
-      log.info(s"Received preprocess msg with args: ${args.mkString(" ")}")
-
-      chain += args(0)
-      max = args(1).toInt
-
-      val agents = args.slice(2, args.size).map { ag: String =>
-        val parts = ag.split(":")
-        remote(parts(0), parts(1).toInt)
-      }
-
-      mumbler = new Mumbler(log, self, agents:_*)
-
-      mumbler.distribute((0 to 20).map(ix => Download(new URI(s"http://storage.googleapis.com/books/ngrams/books/googlebooks-eng-us-all-2gram-20090715-${ix}.csv.zip"))))
-
-      // done preprocessing, now do the mumble
-      self ! Control(Mumble, args)
-
-    case Control(Mumble, args) => mumbler.all(Request(Mumble, args(0)))
+    case Control(Mumble, seed) => mumbler.all(Request(Mumble, List[String](seed)))
 
     case _: Control => log.info(s"Unexpected command")
 
@@ -70,15 +62,16 @@ class Conductor extends Actor with ActorLogging {
       // update response
       // evaluate nodes' responses
       mumbler.mumble(sender, response) match {
-        case AddToChain(word) =>
-          chain += word
+        case AddToChain(word: String) =>
           log.info(s"$word")
+          
+          val chain: Seq[String] = response.chain ++ List(word)
           log.debug(s"chain so far: ${chain.mkString(" ")}")
 
-          if (chain.length == max) exit(s"reached requested max chain length, $max")
-          else mumbler.all(Request(Mumble, chain.last))
+          if (chain.length == chainMax) exit(s"reached requested max chain length, $chainMax", chain)
+          else mumbler.all(Request(Mumble, chain))
 
-        case EndChain => exit("no following words found")
+        case EndChain => exit("no following words found", response.chain)
         case NotAllNodesReported =>  // continue
       }
 
@@ -86,11 +79,13 @@ class Conductor extends Actor with ActorLogging {
     case msg: String => log.info(s"Received message: '$msg' from $sender")
   }
 
-  def exit(reason: String) {
+  def exit(reason: String, chain: Seq[String]) {
     log.info(s"Exiting b/c ${reason}")
     log.info(s"Chain: ${chain.mkString(" ")}")
-    context.system.terminate()
-    System.exit(1)
+
+    // TODO, don't want to kill whole system anymore, just return all answers. Q: need to do something with this actor to clean up?
+    //context.system.terminate()
+    //System.exit(1)
   }
 }
 

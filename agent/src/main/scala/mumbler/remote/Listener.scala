@@ -34,9 +34,10 @@ class Agent extends Actor with ActorLogging {
 
       request.cmd match {
         case Mumble =>
-          log.info(s"Mumbling starting with ${request.arg}")
-          val followers: Option[Map[String, Int]] = Searcher.findFollowing(dir, request.arg)
-          sender ! Response(request.cmd, request.arg, followers)
+          val word = request.chain.last
+          log.info(s"Mumbling starting with ${word}")
+          val followers: Option[Map[String, Int]] = Searcher.findFollowing(dir, word)
+          sender ! Response(request.cmd, request.chain, followers)
 
         case _ =>
           log.info(s"Unexpected command: ${request.cmd}")
