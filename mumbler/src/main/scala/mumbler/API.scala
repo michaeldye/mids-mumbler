@@ -101,7 +101,7 @@ class API(val bindAddress: String, val port: Int)(implicit val system: ActorSyst
   }
 
   def chainSource(system: ActorSystem, remotes: Seq[ActorRef], max: Int, word: String): Graph[SourceShape[Message], Any] = {
-    
+
     GraphDSL.create() { implicit builder =>
       import GraphDSL.Implicits._
 
