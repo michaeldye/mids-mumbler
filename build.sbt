@@ -6,6 +6,7 @@ lazy val common = Seq(
     "com.typesafe.akka" %% "akka-http" % "10.0.10",
     "com.typesafe.akka" %% "akka-actor" % "2.5.6",
     "com.typesafe.akka" %% "akka-remote" % "2.5.6",
+    "ch.qos.logback" % "logback-classic" % "1.2.3",
     "com.typesafe.scala-logging" %% "scala-logging" % "3.7.2"
   )
 )
@@ -20,7 +21,7 @@ lazy val mumbler = (project in file("mumbler")).
   settings(common: _*).
   settings(
     name := "mids_mumbler",
-    mainClass in (Compile, run) := Some("mumbler.CLI")
+    mainClass in (Compile, run) := Some("mumbler.Launch")
   ).
   dependsOn(messages)
 
