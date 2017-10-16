@@ -1,15 +1,15 @@
 package mumbler.remote
 
-import java.nio.file.Paths
-import java.io.PrintWriter
-import java.io.File
-import java.io.FileInputStream
-import java.util.zip.ZipInputStream
-import java.net.URI
 import java.io.BufferedReader
+import java.io.File
 import java.io.InputStreamReader
-import java.util.regex.Pattern
+import java.io.PrintWriter
+import java.net.URI
 import java.nio.file.Path
+import java.nio.file.Paths
+import java.util.regex.Pattern
+import java.util.zip.ZipInputStream
+
 import org.apache.http.client.fluent.Request
 
 /**

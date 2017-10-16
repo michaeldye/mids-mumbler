@@ -1,20 +1,13 @@
 package mumbler
 
 import java.net.URI
-import java.util.concurrent.TimeUnit
 
-import scala.concurrent.Await
-import scala.concurrent.duration.Duration
+
 
 import akka.actor.Actor
 import akka.actor.ActorLogging
 import akka.actor.ActorRef
-import akka.util.Timeout
-import mumbler.transport.Messages.Control
 import mumbler.transport.Messages.Download
-import mumbler.transport.Messages.Mumble
-import mumbler.transport.Messages.Request
-import mumbler.transport.Messages.Response
 
 class Downloader(val filesMax: Int, val remotes: Seq[ActorRef]) extends Actor with ActorLogging {
 

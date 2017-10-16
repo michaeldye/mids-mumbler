@@ -1,14 +1,15 @@
 package mumbler.remote
 
 import java.nio.file.Paths
+
 import akka.actor.Actor
-import mumbler.transport.Messages._
-import akka.actor.Props
-import akka.actor.ActorSystem
-import java.net.URI
-import akka.event.Logging
-import org.slf4j.LoggerFactory
 import akka.actor.ActorLogging
+import akka.actor.ActorSystem
+import akka.actor.Props
+import mumbler.transport.Messages.Download
+import mumbler.transport.Messages.Mumble
+import mumbler.transport.Messages.Request
+import mumbler.transport.Messages.Response
 
 /**
  * @author mdye

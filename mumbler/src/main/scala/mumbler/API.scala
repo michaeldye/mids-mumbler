@@ -1,40 +1,29 @@
 package mumbler
 
-import scala.concurrent.Future
+import java.util.concurrent.TimeUnit
+
+import scala.concurrent.Await
+import scala.concurrent.duration.Duration
 import scala.util.Failure
 import scala.util.Success
 
 import com.typesafe.scalalogging.StrictLogging
 
-import akka.NotUsed
 import akka.actor.ActorRef
 import akka.actor.ActorSystem
 import akka.actor.Props
 import akka.http.scaladsl.Http
-import akka.http.scaladsl.model.ws.BinaryMessage
 import akka.http.scaladsl.model.ws.Message
 import akka.http.scaladsl.model.ws.TextMessage
 import akka.http.scaladsl.server.Directives
 import akka.stream.ActorMaterializer
-import akka.stream.scaladsl.BroadcastHub
+import akka.stream.Graph
+import akka.stream.SourceShape
 import akka.stream.scaladsl.Flow
-import akka.stream.scaladsl.Keep
-import akka.stream.scaladsl.MergeHub
+import akka.stream.scaladsl.GraphDSL
 import akka.stream.scaladsl.Sink
 import akka.stream.scaladsl.Source
-import akka.stream.Graph
-import akka.stream.scaladsl.RunnableGraph
-import akka.stream.ClosedShape
-import akka.stream.scaladsl.GraphDSL
-import akka.stream.SourceShape
-import akka.stream.Graph
-import akka.stream.Outlet
-import scala.concurrent.Await
 import akka.util.Timeout
-import scala.concurrent.duration.Duration
-import java.util.concurrent.TimeUnit
-import mumbler.transport.Messages.Control
-import mumbler.transport.Messages.Control
 
 object Launch extends App with StrictLogging {
   implicit val system = ActorSystem("Mumbler")
@@ -84,8 +73,7 @@ class API(val bindAddress: String, val port: Int)(implicit val system: ActorSyst
           extractUpgradeToWebSocket { upgrade =>
 
             // do this before all words are collected b/c we want to publish them on the socket as they arrive
-            complete(upgrade.handleMessagesWithSinkSource(
-              Sink.ignore, chainSource(system, remotes, chainMax, word)))
+            complete(upgrade.handleMessagesWithSinkSource(Sink.ignore, chainSource(system, remotes, chainMax, word)))
           }
         }
       }

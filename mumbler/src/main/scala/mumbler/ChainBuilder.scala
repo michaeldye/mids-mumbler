@@ -1,27 +1,15 @@
 package mumbler
 
-import akka.stream.actor.ActorPublisher
+import scala.annotation.tailrec
+import scala.util.Random
+
 import akka.actor.Actor
-import akka.actor.ActorSystem
-import akka.actor.Props
-import mumbler.transport.Messages._
-import java.net.URI
-import scala.concurrent.Await
-import scala.concurrent.duration._
 import akka.actor.ActorLogging
 import akka.actor.ActorRef
-import scala.collection.mutable.ListBuffer
-import akka.actor.ActorSelection
-import java.util.concurrent.TimeUnit
-import akka.util.Timeout
-import scala.collection.mutable.ListBuffer
-import scala.util.Random
-import scala.collection.immutable.ListMap
-import akka.actor.ActorContext
-import akka.event.LoggingAdapter
-import scala.annotation.tailrec
-import akka.stream.actor.ActorPublisherMessage.Cancel
-import scala.collection.mutable
+import akka.stream.actor.ActorPublisher
+import mumbler.transport.Messages.Mumble
+import mumbler.transport.Messages.Request
+import mumbler.transport.Messages.Response
 
 /**
  * @author mdye
@@ -60,7 +48,7 @@ class ChainBuilder(val max: Int, val word: String)(implicit val remotes: Seq[Act
   def endChain(reason: String, chain: Seq[String]) {
     log.info(s"Exiting b/c ${reason}")
     log.info(s"Chain: ${chain.mkString(" ")}")
-    onComplete()
+    onCompleteThenStop()
   }
 
   // a helper class from before we made the owning ActorPublisher that does some of this work
