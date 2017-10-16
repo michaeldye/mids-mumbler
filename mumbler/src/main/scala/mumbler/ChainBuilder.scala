@@ -27,9 +27,9 @@ import scala.collection.mutable
  * @author mdye
  */
 class ChainBuilder(val max: Int, val word: String)(implicit val remotes: Seq[ActorRef]) extends Actor with ActorPublisher[String] with ActorLogging {
-  
+
   val mum = new Mumbler(self, remotes: _*)
-  
+
   // start work
   mum.all(Request(Mumble, Seq(word)))
 
@@ -38,7 +38,6 @@ class ChainBuilder(val max: Int, val word: String)(implicit val remotes: Seq[Act
     case response: Response =>
       log.debug(s"Received response from remote mumbler: ${response.result.mkString(" ")}")
 
-      // update response
       // evaluate nodes' responses
       mum.mumble(sender, response) match {
         case AddToChain(word: String) =>
@@ -47,17 +46,13 @@ class ChainBuilder(val max: Int, val word: String)(implicit val remotes: Seq[Act
           val chain: Seq[String] = response.chain ++ Seq(word)
           log.debug(s"chain so far: ${chain.mkString(" ")}")
 
-          // publish to consumers
+          // publish to consumers of this actorPublisher
           onNext(word)
 
           if (chain.length == max) endChain(s"reached requested max chain length, $max", chain)
           else mum.all(Request(Mumble, chain))
 
-        // TODO: fix this so that it sends complete or whatever
-        case EndChain => {
-          endChain("no following words found", response.chain)
-          onComplete()
-        }
+        case EndChain => endChain("no following words found", response.chain)
         case NotAllNodesReported => // continue
       }
   }
@@ -65,6 +60,7 @@ class ChainBuilder(val max: Int, val word: String)(implicit val remotes: Seq[Act
   def endChain(reason: String, chain: Seq[String]) {
     log.info(s"Exiting b/c ${reason}")
     log.info(s"Chain: ${chain.mkString(" ")}")
+    onComplete()
   }
 
   // a helper class from before we made the owning ActorPublisher that does some of this work
