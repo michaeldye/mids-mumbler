@@ -63,20 +63,18 @@ class API(val bindAddress: String, val port: Int)(implicit val system: ActorSyst
   implicit val executionContext = system.dispatcher
 
   val route =
-    pathEndOrSingleSlash {
+    path("chain" / IntNumber / "seed" / """\w+""".r) { (chainMax, word) =>
       get {
-        getFromResource("index.html")
-      }
-    } ~
-      path("chain" / IntNumber / "seed" / """\w+""".r) { (chainMax, word) =>
-        get {
-          extractUpgradeToWebSocket { upgrade =>
+        extractUpgradeToWebSocket { upgrade =>
 
-            // do this before all words are collected b/c we want to publish them on the socket as they arrive
-            complete(upgrade.handleMessagesWithSinkSource(Sink.ignore, chainSource(system, remotes, chainMax, word)))
-          }
+          // do this before all words are collected b/c we want to publish them on the socket as they arrive
+          complete(upgrade.handleMessagesWithSinkSource(Sink.ignore, chainSource(system, remotes, chainMax, word)))
         }
       }
+    } ~
+    pathPrefix("ui") {
+      getFromBrowseableDirectories(sys.env("MARKOV_UI"))
+    }
 
   val bindingFuture = Http().bindAndHandle(route, bindAddress, port)
 

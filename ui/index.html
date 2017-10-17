@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Markov Chain Generator from N-gram Source Files</title>
+    <!-- load MUI -->
+    <link href="/ui/mui.min.css" rel="stylesheet" type="text/css" />
+    <style>
+      body {
+        margin: 5em;
+      }
+
+      * {
+        color: #555;
+        font-family: 'Helvetica Neue', 'Open Sans', Arial, sans-serif;
+        font-size: 120%;
+      }
+
+      h2 {
+        font-size: 200%;
+        font-weight: bold;
+      }
+
+      input {
+        font-size: 100% !important;
+      }
+
+      .recent {
+        color: black;
+        font-weight: bold;
+      }
+
+      #chain {
+        text-align: justify-all;
+        font-size: 140%;
+      }
+    </style>
+    <script type="text/javascript">
+      var loc = window.location, new_uri;
+      new_uri = "ws://";
+      new_uri += loc.host;
+      new_uri += "/chain";
+
+      var max = 20; // a default
+
+      var recentTagOpen = '<span class="recent">';
+      var recentTagClose = '</span>';
+
+      var maxChainEndTag = '&#9635;';
+      var earlyEndTag = '&#9639;';
+
+      var tagReg = new RegExp(recentTagOpen + '([^ ]+)' + recentTagClose.replace(/\//, '\/'), 'g');
+
+      var urlParams = new URLSearchParams(window.location.search);
+      maxVals = urlParams.getAll('chainmax');
+      if (maxVals.length > 0) {
+        val = maxVals[maxVals.length-1];
+        parsed = parseInt(val);
+        if (parsed > 0) {
+          max = parsed;
+        }
+      }
+
+      function cleanTags(str) {
+        return str.replace(tagReg, '$1');
+      }
+
+      function markEnd(atMax, wordCount) {
+
+        return function() {
+          var endTag;
+          if (atMax) {
+            endTag = maxChainEndTag;
+          } else {
+            endTag = earlyEndTag;
+          }
+
+          if (document.getElementById('tag').innerHTML == "") {
+
+            document.getElementById('tag').innerHTML = recentTagOpen + endTag + ' ' + wordCount + recentTagClose;
+          }
+        }
+      }
+
+      function wsConnect() {
+        var word = document.getElementById('word').value;
+        var eolTimeout;
+
+        if (word) {
+          //document.getElementById('chain').innerHTML = recentTagOpen + word + recentTagClose;
+          document.getElementById('chain').innerHTML = word;
+          document.getElementById('tag').innerHTML = "";
+          total = 1;
+
+          const socket = new WebSocket(new_uri + '/' + max + '/seed/' + word);
+
+          socket.addEventListener('message', function (event) {
+            window.clearTimeout(eolTimeout);
+            total++;
+
+            eolTimeout = window.setTimeout(markEnd(total == max, total), 200);
+
+            var existing = document.getElementById('chain').innerHTML;
+            //var n = cleanTags(existing);
+            //document.getElementById('chain').innerHTML = n + ' ' + recentTagOpen + event.data + recentTagClose;
+            document.getElementById('chain').innerHTML = existing + ' ' + event.data;
+
+          });
+
+          socket.addEventListener('onclose', function (event) {
+            console.log(socket.readState);
+            console.log("closed");
+          });
+        } else {
+          console.log('Skipping request because form field is empty');
+        }
+      }
+
+      var seeds = [
+        'shoe',
+        'glue',
+        'hat',
+        'tail',
+        'comet',
+        'train',
+        'cheese',
+        'bungy',
+        'fruit',
+        'rabbit',
+        'moose'
+      ]
+
+      // run on load; TODO: cancel this when user moves mouse, set again after enough time has passed
+
+      var autoSearch = window.setInterval(function() {
+        var seed = seeds[Math.floor(Math.random() * (seeds.length - 0) + 0)];
+        console.log("selected", seed);
+        document.getElementById('word').value = seed;
+        wsConnect();
+      }, 6000)
+    </script>
+  </head>
+  <body>
+      <h2>Markov Chain Generator</h2>
+    <div id="input" style="margin-top: 2em;">
+      <form id="seed" class="mui-form" action="#">
+        <div class="mui-textfield">
+        <input name="word" id="word" placeholder="enter seed word" />
+        </div>
+        <button onclick="event.preventDefault(); wsConnect();" class="mui-btn mui-btn--raised" autofocus>generate chain</button>
+      </form>
+    </div>
+    <div id="output" style="margin-top: 3em;">
+      <p id="chain"></p>
+      <p id="tag"></p>
+    </div>
+  </body>
+</html>

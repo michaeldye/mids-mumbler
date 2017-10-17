@@ -13,7 +13,7 @@ Akka-based implementation of a Markov chain generator from Google n-gram data se
 
 * Build with SBT: `sbt assembly`
 
-* Upload `./agent/target/scala-2.12/mids_mumbler_agent-assembly-0.1.0.jar` to remote nodes (perhaps gpfs1, gpfs2, and gpfs3). Upload `./mumbler/target/scala-2.12/mids_mumbler-assembly-0.1.0.jar` to a system from which you can make websocket requests and that has network access to the remote nodes (this hosts the websocket API).
+* Upload `./agent/target/scala-2.12/mids_mumbler_agent-assembly-0.1.0.jar` to remote nodes (perhaps gpfs1, gpfs2, and gpfs3). Upload `./mumbler/target/scala-2.12/mids_mumbler-assembly-0.1.0.jar` to a system from which you can make websocket requests and that has network access to the remote nodes (this hosts the websocket API). Upload the `ui` directory to this system also.
 
 * Start mumbler agent on each node:
 
@@ -21,9 +21,9 @@ Akka-based implementation of a Markov chain generator from Google n-gram data se
     DATADIR=/vol/ngram java -Dakka.remote.netty.tcp.hostname="gpfs2" -Dakka.remote.netty.tcp.port="5442" -jar ./agent/target/scala-2.12/mids_mumbler_agent-assembly-0.1.0.jar
     DATADIR=/vol/ngram java -Dakka.remote.netty.tcp.hostname="gpfs3" -Dakka.remote.netty.tcp.port="5443" -jar ./agent/target/scala-2.12/mids_mumbler_agent-assembly-0.1.0.jar
 
-* Execute API launcher, providing configuration for the number of n-gram source files to process (100), an address and port to which to bind a websocket API (0.0.0.0:8080), and the hostname and address of each remote agent (gpfs1:5442...):
+* Execute API launcher, providing configuration for the number of n-gram source files to process (100), an address and port to which to bind a websocket API (0.0.0.0:8080), and the hostname and address of each remote agent (gpfs1:5442...). The envvar points to the `ui` directory in the project root:
 
-    java -Dakka.remote.netty.tcp.hostname="api" -Dakka.remote.netty.tcp.port="2552" -jar mids_mumbler-assembly-0.1.0.jar 100 0.0.0.0:8080 gpfs1:5442 gpfs2:5442 gpfs3:5442
+    MARKOV_UI=$PWD/ui; java -Dakka.remote.netty.tcp.hostname="api" -Dakka.remote.netty.tcp.port="2552" -jar mids_mumbler-assembly-0.1.0.jar 100 0.0.0.0:8080 gpfs1:5442 gpfs2:5442 gpfs3:5442
 
 On first execution of the API launcher, the remote agents will download and preprocess input files as they are streamed (the full corpus is distributed among the agents). This means that the first invocation will take approximately 90 minutes to be ready to serve requests (if you'd like to test the system with fewer source files, replace the quantity "100" in the above invocation with a smaller value). On each subsequent invocation, the agents will report that the files have already been processed.
 
