@@ -73,7 +73,7 @@ class API(val bindAddress: String, val port: Int)(implicit val system: ActorSyst
       }
     } ~
     pathPrefix("ui") {
-      getFromBrowseableDirectories(sys.env("MARKOV_UI"))
+      getFromDirectory(sys.env("MARKOV_UI"))
     }
 
   val bindingFuture = Http().bindAndHandle(route, bindAddress, port)
