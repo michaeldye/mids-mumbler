@@ -9,32 +9,55 @@
     <style>
       body {
         margin: 5em;
+	margin-top: .3em;
       }
 
-      * {
+      div, span {
         color: #555;
         font-family: 'Helvetica Neue', 'Open Sans', Arial, sans-serif;
-        font-size: 120%;
+        font-size: 16pt;
+	line-height: 30pt;
       }
 
       h2 {
-        font-size: 200%;
+        font-size: 24pt;
         font-weight: bold;
+        margin-bottom: .25em;
+      }
+
+      h3 {
+        color: #777;
+        margin-top: .25em;
       }
 
       input {
-        font-size: 100% !important;
+        font-size: 20pt !important;
+      }
+
+      #description p {
+	color: #777;
+	font-size: 11pt;
+	line-height: 16pt;
+      }
+
+      #output {
+        padding: 1em;
+      }
+
+      #output * {
+	font-size: 26pt;
+        text-align: justify-all;
+        color: #466BB0;
       }
 
       .recent {
-        color: black;
         font-weight: bold;
       }
 
-      #chain {
-        text-align: justify-all;
-        font-size: 140%;
+      #tag * {
+        color: #222;
       }
+
     </style>
     <script type="text/javascript">
       var loc = window.location, new_uri;
@@ -87,24 +110,29 @@
         var word = document.getElementById('word').value;
         var eolTimeout;
 
+	console.log(word);
+
         if (word) {
-          //document.getElementById('chain').innerHTML = recentTagOpen + word + recentTagClose;
-          document.getElementById('chain').innerHTML = word;
+          document.getElementById('chain').innerHTML = recentTagOpen + word + recentTagClose;
+          //document.getElementById('chain').innerHTML = word;
           document.getElementById('tag').innerHTML = "";
           total = 1;
 
           const socket = new WebSocket(new_uri + '/' + max + '/seed/' + word);
 
           socket.addEventListener('message', function (event) {
+            var word = event.data.toLowerCase();
+
+
             window.clearTimeout(eolTimeout);
             total++;
 
-            eolTimeout = window.setTimeout(markEnd(total == max, total), 200);
+            eolTimeout = window.setTimeout(markEnd(total == max, total), 800);
 
             var existing = document.getElementById('chain').innerHTML;
-            //var n = cleanTags(existing);
-            //document.getElementById('chain').innerHTML = n + ' ' + recentTagOpen + event.data + recentTagClose;
-            document.getElementById('chain').innerHTML = existing + ' ' + event.data;
+            var n = cleanTags(existing);
+            document.getElementById('chain').innerHTML = n + ' ' + recentTagOpen + word + recentTagClose;
+            // document.getElementById('chain').innerHTML = existing + ' ' + event.data;
 
           });
 
@@ -133,16 +161,21 @@
 
       // run on load; TODO: cancel this when user moves mouse, set again after enough time has passed
 
+    searchintervalVals = urlParams.getAll('searchinterval');
+    if (searchintervalVals.length > 0) {
+
       var autoSearch = window.setInterval(function() {
         var seed = seeds[Math.floor(Math.random() * (seeds.length - 0) + 0)];
         console.log("selected", seed);
         document.getElementById('word').value = seed;
         wsConnect();
-      }, 6000)
+      }, searchintervalVals[0])
+    }
     </script>
   </head>
   <body>
-      <h2>Markov Chain Generator</h2>
+    <h2>Markov Chains from English Literature Corpus (non-conversational)</h2>
+    <h3>IBM Watson and Cloud Platform / Applied Sciences Team</h3>
     <div id="input" style="margin-top: 2em;">
       <form id="seed" class="mui-form" action="#">
         <div class="mui-textfield">
@@ -151,9 +184,15 @@
         <button onclick="event.preventDefault(); wsConnect();" class="mui-btn mui-btn--raised" autofocus>generate chain</button>
       </form>
     </div>
-    <div id="output" style="margin-top: 3em;">
+    <div id="output" style="margin-top: 1.4em;">
       <p id="chain"></p>
       <p id="tag"></p>
+    </div>
+<hr />
+    <div id="description" style="margin-top: 1em;">
+      <p>This demonstration uses Akka remote actors to process text on edge nodes. A <em>head</em> node on an Nvidia TX2 accepts an input <em>seed</em> word and appends successive words provided by remote nodes until a maximum word chain limit is reached. The process is then repeated with a new word.</p>
+      <p>When a remote actor is queried to provide a list of following words given an antecedent, it processes a local copy of English language literary texts and returns a the list of words along with the frequency of their occurrence in the corpus. The head node selects a following word at random but weighted by the frequency of occurence of the following word.</p>
+      <p>The corpus used is distributed among the remote nodes and is 96 Gigabytes in size.</p>
     </div>
   </body>
 </html>
