@@ -1,0 +1,7 @@
+FROM arm64v8/openjdk:9-b181-jre-slim
+MAINTAINER mdye@us.ibm.com
+
+COPY . /proj
+WORKDIR /proj
+ENV MARKOV_UI=/proj/ui
+CMD ["java", "-Dakka.remote.netty.tcp.port='2552'", "-jar", "./mumbler/target/scala-2.12/mids_mumbler-assembly-0.1.0.jar", "100", "0.0.0.0:8092", "gpfs2:5442", "gpfs3:5443"]
