@@ -2,6 +2,7 @@ package mumbler.remote
 
 import java.nio.file.Paths
 
+import scala.io.Source
 import akka.actor.Actor
 import akka.actor.ActorLogging
 import akka.actor.ActorSystem
@@ -22,6 +23,12 @@ class Agent extends Actor with ActorLogging {
   val hostname = if (System.getenv("HOSTNAME") != null) System.getenv("HOSTNAME") else System.getProperty("akka.remote.netty.tcp.hostname")
   val dir = Paths.get(System.getenv("DATADIR"))
 
+  val badwordsPath = Paths.get(dir.toString(), "badwords.txt").toFile()
+  val badwords = Source.fromFile(badwordsPath).getLines.toList
+  val searcher = new Searcher(badwords)
+
+  log.info(s"Bad words list loaded from ${badwordsPath}")
+
   override
   def receive = {
     case dl: Download =>
@@ -37,7 +44,7 @@ class Agent extends Actor with ActorLogging {
         case Mumble =>
           val word = request.chain.last
           log.info(s"Mumbling starting with ${word}")
-          val followers: Option[Map[String, Int]] = Searcher.findFollowing(dir, word)
+          val followers: Option[Map[String, Int]] = searcher.findFollowing(dir, word)
           sender ! Response(request.cmd, request.chain, followers)
 
         case _ =>
