@@ -47,13 +47,20 @@ object Launch extends App with StrictLogging {
     resolveRemote(parts(0), parts(1).toInt)
   }
 
-  // upon construction will send messages to all remotes to download source files
-  system.actorOf(Props(new Downloader(args(0).toInt, remotes)), name = "Downloader")
-  logger.info(s"Downloader begun, source files are being processed if not already present")
+  val filesMax = args(0).toInt
 
-  val ws = args(1).split(":")
-  val api = new API(ws(0), ws(1).toInt)
-  logger.info(s"API listening on ${ws(0)}:${ws(1)}")
+  def callback(downloaded: Int): Unit = {
+    Console.println(s"Downloaded: ${downloaded}/${}")
+    if (downloaded == filesMax) {
+      val ws = args(1).split(":")
+      val api = new API(ws(0), ws(1).toInt)
+      logger.info(s"API listening on ${ws(0)}:${ws(1)}")
+    }
+  }
+
+  // upon construction will send messages to all remotes to download source files
+  system.actorOf(Props(new Downloader(filesMax, callback, remotes)), name = "Downloader")
+
 }
 
 class API(val bindAddress: String, val port: Int)(implicit val system: ActorSystem, implicit val remotes: Seq[ActorRef]) extends Directives with StrictLogging {

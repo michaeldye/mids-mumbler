@@ -7,10 +7,7 @@ import akka.actor.Actor
 import akka.actor.ActorLogging
 import akka.actor.ActorSystem
 import akka.actor.Props
-import mumbler.transport.Messages.Download
-import mumbler.transport.Messages.Mumble
-import mumbler.transport.Messages.Request
-import mumbler.transport.Messages.Response
+import mumbler.transport.Messages._
 
 /**
  * @author mdye
@@ -34,9 +31,8 @@ class Agent extends Actor with ActorLogging {
     case dl: Download =>
       log.info(s"Received dl '$dl'")
 
-      if (Writer.preprocess(dir, dl.target)) {
-        sender ! s"processed ${dl.target}"
-      } else sender ! s"skipped preprocessing ${dl.target}, file already exists"
+      if (Writer.preprocess(dir, dl.target)) sender ! Report(s"Fetched and preprocessed content", true, dl.target)
+      else sender ! Report(s"Skipped preprocessing, file already exists", true, dl.target)
     case request: Request =>
       log.info(s"Received request '$request'")
 
