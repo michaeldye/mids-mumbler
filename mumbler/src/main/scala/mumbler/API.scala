@@ -1,6 +1,7 @@
 package mumbler
 
 import java.util.concurrent.TimeUnit
+import java.nio.file.Paths
 
 import scala.concurrent.Await
 import scala.concurrent.duration.Duration
@@ -80,6 +81,9 @@ class API(val bindAddress: String, val port: Int)(implicit val system: ActorSyst
       }
     } ~
     pathPrefix("ui") {
+      pathEndOrSingleSlash {
+        getFromFile(Paths.get(sys.env("MARKOV_UI"), "index.html").toString())
+      } ~
       getFromDirectory(sys.env("MARKOV_UI"))
     }
 
