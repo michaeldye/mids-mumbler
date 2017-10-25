@@ -35,7 +35,9 @@ class ChainBuilder(val max: Int, val word: String)(implicit val remotes: Seq[Act
           log.debug(s"chain so far: ${chain.mkString(" ")}")
 
           // publish to consumers of this actorPublisher
-          onNext(word)
+          if (totalDemand > 0) {
+            onNext(word)
+          }
 
           if (chain.length == max) endChain(s"reached requested max chain length, $max", chain)
           else mum.all(Request(Mumble, chain))
