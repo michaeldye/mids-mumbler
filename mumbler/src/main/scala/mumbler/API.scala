@@ -30,7 +30,7 @@ object Launch extends App with StrictLogging {
   implicit val system = ActorSystem("Mumbler")
 
   if (args.size < 3) {
-    Console.err.println("Usage: java -jar <mids_mumbler-assembly...jar> files_max wslistenaddr:wsport remoteaddr:port [[remoteaddr2:port2]...]")
+    Console.err.println("Usage: java -jar <mids_mumbler-assembly...jar> files_count wslistenaddr:wsport remoteaddr:port [[remoteaddr2:port2]...]")
     System.exit(1)
   }
 
@@ -39,8 +39,8 @@ object Launch extends App with StrictLogging {
     def resolveRemote(host: String, port: Int): ActorRef = {
       val duration = Duration.create(30, TimeUnit.SECONDS)
       implicit val timeout = Timeout(duration)
-      val remote = Await.result(system.actorSelection(s"akka.tcp://RemoteMumbler@${host}:${port}/user/Agent").resolveOne(), duration)
-      Console.println(s"Remote: ${remote}")
+      val remote = Await.result(system.actorSelection(s"akka://RemoteMumbler@${host}:${port}/user/Agent").resolveOne(), duration)
+      logger.info(s"Remote: ${remote}")
       remote
     }
 
@@ -48,19 +48,26 @@ object Launch extends App with StrictLogging {
     resolveRemote(parts(0), parts(1).toInt)
   }
 
-  val filesMax = args(0).toInt
+  val filesCt = args(0).toInt
 
+  // TODO: replace this with immediate setup of API, show in UI some stats about total words indexed?
+  // (see API routes note for more info on that)
+
+  // TODO: send some data via WS to UI about the # of workers
   def callback(downloaded: Int): Unit = {
-    Console.println(s"Downloaded: ${downloaded}/${}")
-    if (downloaded == filesMax) {
+
+    if (downloaded == filesCt) {
       val ws = args(1).split(":")
       val api = new API(ws(0), ws(1).toInt)
       logger.info(s"API listening on ${ws(0)}:${ws(1)}")
+    } else {
+      val waitCt = filesCt - downloaded
+      logger.info(s"Waiting on processing of ${waitCt}/${filesCt} by remotes before starting API")
     }
   }
 
   // upon construction will send messages to all remotes to download source files
-  system.actorOf(Props(new Downloader(filesMax, callback, remotes)), name = "Downloader")
+  system.actorOf(Props(new Downloader(filesCt, callback, remotes)), name = "Downloader")
 
 }
 
@@ -70,6 +77,7 @@ class API(val bindAddress: String, val port: Int)(implicit val system: ActorSyst
   // needed for the future flatMap/onComplete in the end
   implicit val executionContext = system.dispatcher
 
+  // TODO: ??? add another route here to handle UI reporting # of workers, qty of data processed
   val route =
     path("chain" / IntNumber / "seed" / """\w+""".r) { (chainMax, word) =>
       get {

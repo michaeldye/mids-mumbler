@@ -1,13 +1,19 @@
 lazy val common = Seq(
   organization := "com.tehlulz",
-  version := "0.1.0",
+  version := "0.2.0",
   scalaVersion := "2.12.3",
   libraryDependencies ++= Seq(
-    "com.typesafe.akka" %% "akka-http" % "10.0.10",
+    "com.typesafe.akka" %% "akka-http" % "10.1.5",
     "com.typesafe.akka" %% "akka-actor" % "2.5.6",
     "com.typesafe.akka" %% "akka-remote" % "2.5.6",
+    "com.typesafe.akka" %% "akka-slf4j" % "2.5.6",
     "ch.qos.logback" % "logback-classic" % "1.2.3",
-    "com.typesafe.scala-logging" %% "scala-logging" % "3.7.2"
+    "com.typesafe.scala-logging" %% "scala-logging" % "3.7.2",
+    "com.thesamet.scalapb" %% "scalapb-runtime" % scalapb.compiler.Version.scalapbVersion % "protobuf",
+    "org.scalatest" %% "scalatest" % "3.0.5" % "test"
+  ),
+  PB.targets in Compile := Seq(
+    scalapb.gen() -> (sourceManaged in Compile).value
   )
 )
 
@@ -36,3 +42,5 @@ lazy val agent = (project in file("agent")).
     )
   ).
   dependsOn(messages)
+
+

@@ -9,19 +9,18 @@ import akka.actor.ActorLogging
 import akka.actor.ActorRef
 import mumbler.transport.Messages._
 
-class Downloader(val filesMax: Int, val apiFn: (Int) => Unit, val remotes: Seq[ActorRef]) extends Actor with ActorLogging {
+// filesCt needs to be the quantity of files to-be-downloaded; it's expected they're sequential and numbered from 0
+class Downloader(val filesCt: Int, val apiFn: (Int) => Unit, val remotes: Seq[ActorRef]) extends Actor with ActorLogging {
 
-  log.info(s"Preprocessing ${filesMax} source data files")
-
-  val last = if (filesMax > 100) 100 else filesMax
+  log.info(s"Preprocessing ${filesCt} source data files")
 
   var fileSuccessCount = 0
 
-  (0 until last).map(ix => {
-    val message = Download(new URI(s"http://storage.googleapis.com/books/ngrams/books/googlebooks-eng-us-all-2gram-20090715-${ix}.csv.zip"))
+  (0 until filesCt).map(ix => {
+    val message = Download(new URI(s"http://10.1.32.10/googlebooks-ngram-${ix}"))
 
       val clusterAssignment = (ix % remotes.size)
-      log.info(s"sending dl ${message} to ${clusterAssignment}")
+      // log.info(s"sending dl ${message} to ${clusterAssignment}")
       remotes(clusterAssignment).tell(message, self)
   })
 
