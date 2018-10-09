@@ -10,6 +10,7 @@ import mumbler.remote.Recorder
 
 class ExampleSpec extends FlatSpec {
 
+  // TODO: do cleanup after tests run
 	def fixture = new {
 		val temp = Paths.get(System.getProperty("java.io.tmpdir"), s"${System.currentTimeMillis()}")
 		temp.toFile().mkdirs()
@@ -37,14 +38,16 @@ class ExampleSpec extends FlatSpec {
     val recorder = new Recorder()
     assert(recorder.record(l1, 4) == None)
     assert(recorder.record(l2, 4) == None)
-    assert(recorder.record(l3, 4) == Some(List(l2,l1)))
+    assert(recorder.record(l3, 4) == Some(List((l2, 4),(l1, 4))))
 
     val recorder2 = new Recorder(recorder.prev)
-    assert(recorder2.record(l4, 5) == Some(List(l3)))
+    // we're recording l4 but what is emitted should be l3 w/ its split index
+    assert(recorder2.record(l4, 5) == Some(List((l3, 4))))
   }
 
 	"collect function" should "split primary records into cache jobs" in {
 		val f = fixture
 		val foo = Writer.collect(f.temp, f.records)
+
   }
 }

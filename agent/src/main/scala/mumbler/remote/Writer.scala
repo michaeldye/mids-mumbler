@@ -34,7 +34,7 @@ object Writer extends StrictLogging {
 
   implicit val ec = ExecutionContext.fromExecutorService(pool)
 
-  def writeStats(dir: Path, word: String, follow: Map[String, Int]): Unit = {
+  def writeStats(dir: Path, word: String, follow: Map[String, Integer]): Unit = {
     val out: File = Paths.get(dir.toAbsolutePath().toString(), word).toFile
     out.getParentFile.mkdirs
 
@@ -51,33 +51,6 @@ object Writer extends StrictLogging {
     val cleaner = if (word.toUpperCase().equals(word)) word.toLowerCase() else word
     return cleaner.split("_")(0)
   }
-
-  /**
-   * TODO: make this function take a (firstWord: String, secondWordPlusMeta: Map[String, String]) which should
-   * open the output writer first and then call another function that does the reduce (using lots of the code
-   * below), returns lines to write and this function calls the printwriter.
-   *
-   * TODO: Make sure this can be handled by a worker in a thread pool. Don't bother with actors at first
-   * b/c we don't want to split the inputs up into reasonable message sizes
-   */
-
-
-//  def collapseEntries(lines: List[String]): Map[String, Int] = {
-//    lines.map(_.split("\\t")).foldLeft(scala.collection.mutable.Map.empty[String,Int])((collected, el) => {
-//      val two = el.slice(0, 2)
-//      if (! two.forall { Pattern.matches("^[A-Za-z0-9][A-Za-z0-9_]*", _) }) collected
-//      else {
-//        val first = readableWord(two.head)
-//        val add = el(4).toInt
-//
-//        val second = readableWord(two.last)
-//        collected += collected get second match {
-//          case Some(num) => (second -> num + add)
-//          case None => (second -> add)
-//        }
-//      }
-//    }).toMap
-//  }
 
   // not tail recursive: we expect input string to always have fewer \t's than the JVM has stack frames
   def indicesOf(str: String, sep: Char): List[Integer] = {
@@ -139,13 +112,13 @@ object Writer extends StrictLogging {
     }
   }
 
-  def collect(dir: Path, uri: URI): Unit = {
-    // TODO: add pool here and execution context so we can fire off write process w/ future
+  def collect(dir: Path, uri: URI): Boolean = {
       var cacheReductions = List[Future[CacheReduction]]()
 
       // we'll have one collect method per dl actor (which are pooled), then
       // that will use a singleton recorder instance that has its own futures -
-      // based writers
+      // based reducers. The final reduction will be single-threaded here again
+      // and we'll reuse the reducer pool to do concurrent writes.
       var recorder = new Recorder()
 
       // used for side effects, a little ugly
@@ -186,95 +159,40 @@ object Writer extends StrictLogging {
 
       val results = Future.sequence(cacheReductions)
 
-      Await.ready(results, 10.seconds)
-      // all should be done now
-
+      // TODO: could use some untangling
       results.onComplete {
         case Success(result) => {
           result.foreach { c: CacheReduction =>
+            // TODO: send stats back; also combine with below
             logger.info(s"Cache reduction success; processed line count: ${c.processed}, indexed: ${c.indexed}")
           }
 
-          // TODO: need to do last reduce step and then send each reduced cache to a writer
-
+          // do the last, group reduction
+          result.foldLeft(Map[String, Map[String, Integer]]()) {
+            case (ms: Map[String, Map[String, Integer]], cr: CacheReduction) => {
+              if (cr.second.isEmpty) ms
+              else {
+                val storedSecond: Map[String, Integer] = ms.getOrElse(cr.seed, Map())
+                ms + (cr.seed -> (storedSecond ++ cr.second))
+              }
+            }
+          }.foreach({
+            case (seed, follow) => {
+              Future {
+                writeStats(dir, seed, follow)
+              }
+            }
+            case _ => {}
+          })
         }
         case Failure(error) => {
           logger.info(s"Write cache failure: ${error}")
         }
       }
 
+      // after demo, can replace this with existing index check
+      true
   }
-
-  /**
-   * TODO: make this function open the file stream then do the split and take the first two words
-   * initially, comparing that (maybe taking just the length and matching subsequent
-   * lines that way?) with later lines. While the substring is the same, gather rest of the line in iterable.
-   * When the substring no longer matches, slap that iterable in a map with the second word as the key and
-   * continue to process just first word matches, gathering up the same second words. Every time the
-   * first word changes, send that in a queue to a separate thread that can: 1) reduce the counts, 2) write the
-   * file named for the first word (collapseEntries is the start)
-   *
-   */
-//  def preprocess(dir: Path, uri: URI): Boolean = {
-//    val to_dl = new File(dir.toFile, uri.getPath.split('/').last)
-//
-//    if (to_dl.exists) false
-//    else {
-//
-//      var word = ""
-//      var follow = Map[String, Int]()
-//
-//      val inputStream = new BufferedReader(new InputStreamReader(uri.toURL().openStream(), "UTF-8"))
-//
-//      Stream.continually(inputStream.readLine).takeWhile(_ != null).
-//        map { _.split("\\t") }.
-//        foreach(words => {
-//          logger.debug(s"Words: ${words}")
-//
-//          val two = words.slice(0, 2)
-//          // process only if both first two words match pattern
-//          if (two.forall { Pattern.matches("^[A-Za-z0-9][A-Za-z0-9_]*", _) }) {
-//            logger.debug(s"Processing words that match filter: ${two}")
-//
-//            val first = readableWord(words(0))
-//
-//            if (first != word) {
-//              // new first word
-//
-//              if (word != "")
-//                writeStats(dir, word, follow)
-//
-//              word = first
-//              follow = Map[String, Int]()
-//            } else {
-//              // N.B. the index in "words" picks out the count, which for
-//              // 3-gram (<word> <word2> <word3> <year> <ct> ...) or index 4
-//
-//              logger.debug(s"Count: ${words(4)}")
-//
-//              val add = words(4).toInt + 1
-//
-//              val second = readableWord(words(1))
-//              val ct = follow get second match {
-//                case Some(num) => num + add
-//                case None => add
-//              }
-//              follow = follow + (second -> ct)
-//            }
-//
-//          } else {
-//            logger.debug(s"Rejecting ${words}")
-//          }
-//        })
-//
-//      // touch the downloaded file name to signal we have processed it
-//      to_dl.createNewFile
-//
-//      // TODO: replace this
-//      // writeStats(dir, word, follow)
-//      true
-//    }
-//  }
 }
 
 class Recorder(var prev: Option[(String, Integer)], var cache: List[(String, Integer)], var exhausted: Boolean) extends StrictLogging {

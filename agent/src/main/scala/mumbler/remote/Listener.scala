@@ -28,15 +28,6 @@ object Listener extends App {
 
 class Agent extends Actor with ActorLogging {
   val dir = Paths.get(System.getenv("DATADIR"))
-
-  // TODO: raise exception if missing
-  // val apiHost = System.getenv("API_HOST")
-  // val apiPort = System.getenv("API_PORT")
-
-  // val duration = Duration.create(30, TimeUnit.SECONDS)
-  // implicit val timeout = Timeout(duration)
-  // val api = Await.result(context.actorSelection(s"akka.tcp://Mumbler@${apiHost}:${apiPort}/user/Downloader").resolveOne(), duration)
-
 	val fetcher = context.actorOf(Props[Fetcher].withDispatcher("dl-dispatcher"), name="Fetcher")
 
   val badwordsPath = Paths.get(dir.toString(), "badwords.txt").toFile()
@@ -49,19 +40,7 @@ class Agent extends Actor with ActorLogging {
   def receive = {
     case dl: Download =>
       log.info(s"Received dl '$dl'")
-
-      // TODO: need to make a pool of actors on this remote that can each take a DL filename and do the fetch,
-      // write to disk, and then send a message back to this supervisor to have it processed. Want to avoid
-      // processing arbitrary sizes of downloaded data b/c then we can't be sure we are gathering all matching
-      // words; it's better if the whole file can be downloaded and written to disk (max network IO this way)
-
-      // TODO: upon completion of indexing, delete the original file and send a message with some stats back
-      // to the API actor for presentation on the page
-
-//      if (Writer.preprocess(dir, dl.target)) sender ! Report(s"Fetched and preprocessed content", true, dl.target)
-//      else sender ! Report(s"Skipped preprocessing, file already exists", true, dl.target)
-
-			fetcher ! Process(dir, dl.target)
+			fetcher ! Process(dir, dl.target, sender)
 
     case request: Request =>
       log.info(s"Received request '$request'")
@@ -84,16 +63,13 @@ class Agent extends Actor with ActorLogging {
 
 class Fetcher extends Actor with ActorLogging {
 
-  // implicit val executionContext = context.system.dispatchers.lookup("dl-dispatcher")
-
 	override
 	def receive = {
 		case process: Process =>
 			log.info(s"Received process $process")
-      Thread.sleep(5000)
-      // context.system.scheduler.scheduleOnce(new FiniteDuration(1, TimeUnit.SECONDS), sender, Report(s"Fetched and preprocessed content", true, process.target))
-      sender ! Report(s"Fetched and preprocessed content", true, process.target)
+      // will always write index files; doesn't skip already-processed ones like before (demo feature)
+      if (Writer.collect(process.dir, process.target)) process.origin ! Report(s"Fetched and preprocessed content", true, process.target)
 	}
 }
 
-case class Process(dir: Path, target: URI)
+case class Process(dir: Path, target: URI, origin: ActorRef)
