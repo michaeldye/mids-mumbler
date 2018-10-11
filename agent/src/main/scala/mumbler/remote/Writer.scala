@@ -8,7 +8,7 @@ import java.nio.file.Paths
 import java.nio.ByteBuffer
 import java.util.regex.Pattern
 
-import java.util.concurrent.ThreadFactory
+import java.util.concurrent.{ForkJoinPool, ThreadFactory}
 import java.util.concurrent.atomic.AtomicLong
 
 import scala.util.Success
@@ -49,10 +49,11 @@ object Writer extends StrictLogging {
 	//	}
 	//)
 
-  val processingThreadPool = Executors.newFixedThreadPool(2)
+  val preProcessingThreadPool = Executors.newFixedThreadPool(2)
+  val streamingDownloadThreadPool = Executors.newFixedThreadPool(1)
 
   // separate from the processing thread, this one downloads
-	implicit val ec = ExecutionContext.fromExecutor(Executors.newFixedThreadPool(2))
+	implicit val ec = ExecutionContext.fromExecutor(new ForkJoinPool())
 
   def writeStats(dir: Path, word: String, follow: Map[String, Integer]): Unit = {
     val out: File = Paths.get(dir.toAbsolutePath().toString(), word).toFile
@@ -162,7 +163,7 @@ object Writer extends StrictLogging {
 			logger.info(s"Issuing request to ${uri.toString}")
 
       val outStr = new PipedOutputStream()
-      val queue = new java.util.concurrent.LinkedBlockingQueue[java.lang.String]()
+      val queue = new java.util.concurrent.ConcurrentLinkedQueue[java.lang.String]()
 
 			val bufSize = 9100
 
@@ -171,38 +172,47 @@ object Writer extends StrictLogging {
 			val instream = entity.getContent
 			val cLength = entity.getContentLength
 
-			processingThreadPool.execute(new PreProcessor(outStr, uri, bufSize, cLength, queue))
+			preProcessingThreadPool.execute(new PreProcessor(outStr, uri, bufSize, cLength, queue))
 
-      Future {
-        logger.info(s"Beginning line stream consumption of ${uri.toString}")
+      streamingDownloadThreadPool.execute(new Runnable {
+    	  val buffer = new Array[Byte](bufSize)
 
-        Stream.continually(queue.take()).foreach(line => {  })
+        def run() {
+          try {
+			      logger.info(s"Locally caching data from ${uri.toString}")
+			      var xferred: Long = 0
+			      while (xferred < cLength) {
+              val read = instream.read(buffer)
+
+			      	if (xferred % (1024*1024*512) == 0) logger.info(s"Read from HTTP stream ${xferred} bytes so far of ${cLength} for ${uri.toString}")
+              outStr.write(buffer, 0, read)
+              xferred += read
+			      }
+
+          } catch {
+			    	case e: Exception => logger.error(e.toString)
+			    } finally {
+
+			      instream.close()
+			      outStr.close()
+			      response.close()
+			    }
+        }
+      })
+
+      val reduce = Future {
+        logger.info(s"Beginning line stream consumption of preprocessed data from ${uri.toString}")
+
+        // Stream.continually(queue.take()).foreach(line => {  })
 
         logger.info(s"Finished reduction of data from ${uri.toString}")
 
+        true
       }
 
-    	val buffer = new Array[Byte](bufSize)
-
-      try {
-			  logger.info(s"Locally caching data from ${uri.toString}")
-			  var xferred: Long = 0
-			  while (xferred < cLength) {
-          val read = instream.read(buffer)
-
-			  	if (xferred % 1024*1024*1024 == 0) logger.info(s"Read from HTTP stream ${xferred} bytes so far of ${cLength} for ${uri.toString}")
-          outStr.write(buffer, 0, read)
-          xferred += read
-			  }
-
-      } catch {
-				case e: Exception => logger.error(e.toString)
-			} finally {
-
-			  instream.close()
-			  outStr.close()
-			  response.close()
-			}
+      Await.result(reduce, Duration.Inf)
+	}
+}
 
 
 //					Stream.continually(instream.readLine).takeWhile(_ != null).foreach(line => {
@@ -273,53 +283,6 @@ object Writer extends StrictLogging {
 //      Stream.continually(inputStream.readLine).takeWhile(_ != null).foreach(line => {
 //
 //      // after demo, can replace this with existing index check
-      true
-	}
-}
-
-//class Processor(val outStr: PipedOutputStream, val uri: URI, val bufSize: Integer, val cLength: Long) extends Runnable with StrictLogging {
-//	// important that the buffer size on the stream itself is *larger* than our buffer size
-//	val inStr = new PipedInputStream(outStr, 800*1024*1024)
-//  var sBuf = scala.collection.mutable.Buffer
-//	var processed: Long = 0
-//  var prevEnd = 0
-//
-//  val pBuf = new scala.collection.mutable.Queue[Array[Byte]]
-//
-//	override
-//	def run(): Unit = {
-//  	val buffer = new Array[Byte](bufSize)
-//
-//    // val procBuffer = ByteBuffer.allocateDirect(800*1024*1024)
-//
-//		logger.info(s"Processing thread reading lines from ${uri.toString}")
-//
-//		while (processed < cLength) {
-//			// N.B. can't use buffer.size, not sure why
-//			val read = inStr.read(buffer, 0, bufSize)
-//
-//      var ix = 0
-//      while (ix < read) {
-//        if (buffer(ix) == 0x0a) {
-//          pBuf += buffer.slice(prevEnd,ix)
-//          prevEnd = ix
-//        }
-//        ix += 1
-//      }
-//
-//			processed += read
-//
-//
-//      // procBuffer.put(buffer, 0, read)
-//      // procBuffer.clear()
-//
-//			if (processed % 1024*1024 == 0) logger.debug(s"Processed ${processed} bytes so far of ${cLength}")
-//
-//		}
-//
-//		logger.info(s"Finished with ${uri.toString}. Processed: ${processed} of ${cLength}")
-//	}
-//}
 
 class Recorder(var prev: Option[(String, Integer)], var cache: List[(String, Integer)], var exhausted: Boolean) extends StrictLogging {
 

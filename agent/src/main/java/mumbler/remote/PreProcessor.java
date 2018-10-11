@@ -99,7 +99,7 @@ public class PreProcessor implements Runnable {
 
         totalProcessed += read;
 
-        if (totalProcessed % 1024*1024*1024 == 0) {
+        if (totalProcessed % (1024*1024*512) == 0) {
           logger.info("Preprocessed {} bytes so far of {} for {}", totalProcessed, cLength, uri.toString());
         }
       }
