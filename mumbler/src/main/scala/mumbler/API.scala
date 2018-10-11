@@ -49,25 +49,24 @@ object Launch extends App with StrictLogging {
   }
 
   val filesCt = args(0).toInt
+  val ws = args(1).split(":")
+  val api = new API(ws(0), ws(1).toInt)
+  logger.info(s"API listening on ${ws(0)}:${ws(1)}")
 
   // TODO: replace this with immediate setup of API, show in UI some stats about total words indexed?
   // (see API routes note for more info on that)
 
   // TODO: send some data via WS to UI about the # of workers
-  def callback(downloaded: Int): Unit = {
+  def report(downloaded: Int): Unit = {
 
-    if (downloaded == filesCt) {
-      val ws = args(1).split(":")
-      val api = new API(ws(0), ws(1).toInt)
-      logger.info(s"API listening on ${ws(0)}:${ws(1)}")
-    } else {
-      val waitCt = filesCt - downloaded
-      logger.info(s"Waiting on processing of ${waitCt}/${filesCt} by remotes before starting API")
+    if (downloaded != filesCt) {
+      val leftCt = filesCt - downloaded
+      logger.info(s"${leftCt}/${filesCt} files left to process by remotes")
     }
   }
 
   // upon construction will send messages to all remotes to download source files
-  system.actorOf(Props(new Downloader(filesCt, callback, remotes)), name = "Downloader")
+  system.actorOf(Props(new Downloader(filesCt, report, remotes)), name = "Downloader")
 
 }
 

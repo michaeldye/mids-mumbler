@@ -17,7 +17,7 @@ class Downloader(val filesCt: Int, val apiFn: (Int) => Unit, val remotes: Seq[Ac
   var fileSuccessCount = 0
 
   (0 until filesCt).map(ix => {
-    val message = Download(new URI(s"http://10.1.32.10/googlebooks-ngram-${ix}"))
+    val message = Download(new URI(s"http://172.17.0.145/googlebooks-ngram-${ix}"))
 
       val clusterAssignment = (ix % remotes.size)
       // log.info(s"sending dl ${message} to ${clusterAssignment}")

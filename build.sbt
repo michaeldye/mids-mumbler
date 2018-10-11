@@ -1,7 +1,12 @@
 lazy val common = Seq(
   organization := "com.tehlulz",
-  version := "0.2.0",
-  scalaVersion := "2.12.3",
+  version := "0.2.0-SNAPSHOT",
+  scalaVersion := "2.12.7",
+  compileOrder := CompileOrder.JavaThenScala,
+
+//  javacOptions ++= Seq(
+//    "--add-modules=jdk.incubator.httpclient",
+//  ),
   libraryDependencies ++= Seq(
     "com.typesafe.akka" %% "akka-http" % "10.1.5",
     "com.typesafe.akka" %% "akka-actor" % "2.5.6",
@@ -14,7 +19,7 @@ lazy val common = Seq(
   ),
   PB.targets in Compile := Seq(
     scalapb.gen() -> (sourceManaged in Compile).value
-  )
+  ),
 )
 
 lazy val messages = (project in file("messages")).
@@ -37,10 +42,15 @@ lazy val agent = (project in file("agent")).
     name := "mids_mumbler_agent",
     mainClass in (Compile, run) := Some("mumbler.remote.Listener"),
     libraryDependencies ++= Seq(
-      "org.apache.httpcomponents" % "httpclient" % "4.4.1",
-      "org.apache.httpcomponents" % "fluent-hc" % "4.4.1"
-    )
+				"org.apache.httpcomponents" % "httpcomponents-client" % "4.5.6",
+				"org.apache.httpcomponents" % "fluent-hc" % "4.5.6",
+        // b/c we have java classes that need it
+        "org.slf4j" % "slf4j-api" % "1.7.25"
+
+    ),
+//    assemblyMergeStrategy in assembly := {
+//      case PathList("io.netty.versions.properties", xs @ _*) => MergeStrategy.first
+//      case _ => MergeStrategy.deduplicate
+//    }
   ).
   dependsOn(messages)
-
-

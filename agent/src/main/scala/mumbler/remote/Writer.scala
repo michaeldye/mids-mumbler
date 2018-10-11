@@ -1,42 +1,64 @@
 package mumbler.remote
 
-import java.io.BufferedReader
-import java.io.File
-import java.io.FileWriter
-import java.io.InputStreamReader
-import java.io.BufferedWriter
-import java.io.BufferedInputStream
-import java.io.PrintWriter
+import java.io._
 import java.net.URI
+import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
+import java.nio.ByteBuffer
 import java.util.regex.Pattern
+
+import java.util.concurrent.ThreadFactory
+import java.util.concurrent.atomic.AtomicLong
 
 import scala.util.Success
 import scala.util.Failure
 import scala.concurrent._
-import scala.concurrent.duration.DurationInt
+import scala.concurrent.duration.Duration
 import java.util.concurrent.Executors
 
 import scala.annotation.tailrec
 import com.typesafe.scalalogging.StrictLogging
 
-import org.apache.http.client.fluent.Request
-
+import org.apache.http.HttpEntity
+import org.apache.http.client.entity.UrlEncodedFormEntity
+import org.apache.http.client.methods.CloseableHttpResponse
+import org.apache.http.client.methods.HttpGet
+import org.apache.http.client.methods.HttpPost
+import org.apache.http.impl.client.CloseableHttpClient
+import org.apache.http.impl.client.HttpClients
+import org.apache.http.message.BasicNameValuePair
+import org.apache.http.util.EntityUtils
 /**
  * @author mdye
  */
 object Writer extends StrictLogging {
 
-  // a bit loose right now, we're probably bound by i/o before cpu with the writer's work
-  val numWorkers = sys.runtime.availableProcessors
-  val pool = Executors.newFixedThreadPool(numWorkers)
+	// dangerous b/c it can eat the box. That's also what we want to do in the demo
+	//val processingThreadPool = Executors.newCachedThreadPool(
+	//	new ThreadFactory {
+	//	  private val counter = new AtomicLong(0L)
 
-  implicit val ec = ExecutionContext.fromExecutorService(pool)
+	//	  def newThread(r: Runnable) = {
+	//	    val th = new Thread(r)
+	//	    th.setName("ngram-proc-thread-" +
+	//	    counter.getAndIncrement.toString)
+	//	    th.setDaemon(true)
+	//	    th
+	//	  }
+	//	}
+	//)
+
+  val processingThreadPool = Executors.newFixedThreadPool(2)
+
+  // separate from the processing thread, this one downloads
+	implicit val ec = ExecutionContext.fromExecutor(Executors.newFixedThreadPool(2))
 
   def writeStats(dir: Path, word: String, follow: Map[String, Integer]): Unit = {
     val out: File = Paths.get(dir.toAbsolutePath().toString(), word).toFile
     out.getParentFile.mkdirs
+
+    logger.debug(s"Writing index for word ${word} to ${out.getAbsolutePath()}")
 
     val writer = new PrintWriter(new BufferedWriter(new FileWriter(out)))
 
@@ -64,7 +86,14 @@ object Writer extends StrictLogging {
     index0(str, 0)
   }
 
-  def fromSplit(word: String, begX: Integer, endX: Integer) = word.substring(begX, endX).split("_")(0)
+  def fromSplit(word: String, begX: Integer, endX: Integer): String = {
+    val sub = word.substring(begX, endX)
+    if (sub.contains("_")) {
+      var split = sub.split("_")
+      if (!split.isEmpty) return split(0)
+    }
+    sub
+  }
 
   // return: firstword, secondword, ct
   def lineProcess(cached: (String, Integer)): Option[(String, String, Integer)] = {
@@ -89,9 +118,8 @@ object Writer extends StrictLogging {
     }
   }
 
-  def reduceCache(recorder: Recorder): Future[CacheReduction] = {
-    Future {
-
+  def reduceCache(recorder: Recorder): CacheReduction = {
+    try {
       if (recorder.cache.isEmpty) throw new IllegalStateException("Got recorder that was empty and shouldn't have been")
 
       val first = {
@@ -106,14 +134,19 @@ object Writer extends StrictLogging {
           m + (t._2 -> ct)
         }
       }
-
-      if (!reduced.isEmpty) logger.debug(s"For word '${first}', would write: ${reduced}")
+      // very noisy
+      // if (!reduced.isEmpty) logger.debug(s"Word '${first}', reduced index: ${reduced}")
       CacheReduction(recorder.cache.size, reduced.size, first, reduced)
+    } catch {
+      case exc: Exception => {
+        exc.printStackTrace
+        throw new RuntimeException("Error processing distributed reduction", exc)
+      }
     }
   }
 
   def collect(dir: Path, uri: URI): Boolean = {
-      var cacheReductions = List[Future[CacheReduction]]()
+      var cacheReductions = List[CacheReduction]()
 
       // we'll have one collect method per dl actor (which are pooled), then
       // that will use a singleton recorder instance that has its own futures -
@@ -126,74 +159,167 @@ object Writer extends StrictLogging {
         cacheReductions = reduceCache(recorder) :: cacheReductions
       }
 
-      // generalized for all gram sizes
-      val inputStream = new BufferedReader(new InputStreamReader(uri.toURL().openStream(), "UTF-8"))
-      Stream.continually(inputStream.readLine).takeWhile(_ != null).foreach(line => {
+			logger.info(s"Issuing request to ${uri.toString}")
+
+      val outStr = new PipedOutputStream()
+      val queue = new java.util.concurrent.LinkedBlockingQueue[java.lang.String]()
+
+			val bufSize = 9100
+
+			val response = HttpClients.createDefault().execute(new HttpGet(uri.toURL.toString))
+			val entity = response.getEntity
+			val instream = entity.getContent
+			val cLength = entity.getContentLength
+
+			processingThreadPool.execute(new PreProcessor(outStr, uri, bufSize, cLength, queue))
+
+      Future {
+        logger.info(s"Beginning line stream consumption of ${uri.toString}")
+
+        Stream.continually(queue.take()).foreach(line => {  })
+
+        logger.info(s"Finished reduction of data from ${uri.toString}")
+
+      }
+
+    	val buffer = new Array[Byte](bufSize)
+
+      try {
+			  logger.info(s"Locally caching data from ${uri.toString}")
+			  var xferred: Long = 0
+			  while (xferred < cLength) {
+          val read = instream.read(buffer)
+
+			  	if (xferred % 1024*1024*1024 == 0) logger.info(s"Read from HTTP stream ${xferred} bytes so far of ${cLength} for ${uri.toString}")
+          outStr.write(buffer, 0, read)
+          xferred += read
+			  }
+
+      } catch {
+				case e: Exception => logger.error(e.toString)
+			} finally {
+
+			  instream.close()
+			  outStr.close()
+			  response.close()
+			}
+
+
+//					Stream.continually(instream.readLine).takeWhile(_ != null).foreach(line => {
           // We're dealing with indices in the line string not words b/c I gamble that it's more performant;
           // we'll leave the chopping out of substrings to the parallelized functions later
 
-          indicesOf(line, '\t') match {
-            case Nil => logger.error(s"Malformed line in input w/r/t stats: ${line}")
-            case ix1 :: _ => {
-              val grams = line.substring(0, ix1)
+						//indicesOf(line, '\t') match {
+          	//  case Nil => logger.error(s"Malformed line in input w/r/t stats: ${line}")
+          	//  case ix1 :: _ => {
+          	//    val grams = line.substring(0, ix1)
 
-              // it's a legitimate line w/r/t stats, separate the grams now
-              indicesOf(grams, ' ') match {
-                case Nil => logger.error(s"Malformed line in input w/r/t grams: ${grams}")
-                case wx1 :: _ => {
-                  recorder.record(line, wx1) match {
-                    case Some(_) => {
-                      appendReduction()
-                      recorder = new Recorder(recorder.prev)
-                    }
-                    case _ => {}
-                  }
-                }
-              }
-            }
-          }
-      })
+          	//    // it's a legitimate line w/r/t stats, separate the grams now
+          	//    indicesOf(grams, ' ') match {
+          	//      case Nil => logger.error(s"Malformed line in input w/r/t grams: ${grams}")
+          	//      case wx1 :: _ => {
+          	//        recorder.record(line, wx1) match {
+          	//          case Some(_) => {
+          	//            appendReduction()
+          	//            recorder = new Recorder(recorder.prev)
+          	//          }
+          	//          case _ => {}
+          	//        }
+          	//      }
+          	//    }
+          	//  }
+          	//}
+ //     		})
 
-      // handle the last line case, it may not have triggered a recorder match
-      if (! recorder.cache.isEmpty) appendReduction()
+  //    		// handle the last line case, it may not have triggered a recorder match
+  //    		if (! recorder.cache.isEmpty) appendReduction()
 
-      val results = Future.sequence(cacheReductions)
+  //    		val results = Future.sequence(cacheReductions)
 
-      // TODO: could use some untangling
-      results.onComplete {
-        case Success(result) => {
-          result.foreach { c: CacheReduction =>
-            // TODO: send stats back; also combine with below
-            logger.info(s"Cache reduction success; processed line count: ${c.processed}, indexed: ${c.indexed}")
-          }
+  //    		Await.ready(results, Duration.Inf)
 
-          // do the last, group reduction
-          result.foldLeft(Map[String, Map[String, Integer]]()) {
-            case (ms: Map[String, Map[String, Integer]], cr: CacheReduction) => {
-              if (cr.second.isEmpty) ms
-              else {
-                val storedSecond: Map[String, Integer] = ms.getOrElse(cr.seed, Map())
-                ms + (cr.seed -> (storedSecond ++ cr.second))
-              }
-            }
-          }.foreach({
-            case (seed, follow) => {
-              Future {
-                writeStats(dir, seed, follow)
-              }
-            }
-            case _ => {}
-          })
-        }
-        case Failure(error) => {
-          logger.info(s"Write cache failure: ${error}")
-        }
-      }
+  //    		// TODO: could use some untangling
+  //    		results.onComplete {
+  //    		  case Success(result) => {
+  //    		    result.foreach { c: CacheReduction =>
+  //    		      // TODO: send stats back; also combine with below
+  //    		      logger.debug(s"Cache reduction success; processed line count: ${c.processed}, indexed: ${c.indexed}")
+  //    		    }
 
-      // after demo, can replace this with existing index check
+  //    		    // do the last, group reduction
+  //    		    result.foldLeft(Map[String, Map[String, Integer]]()) {
+  //    		      case (ms: Map[String, Map[String, Integer]], cr: CacheReduction) => {
+  //    		        if (cr.second.isEmpty) ms
+  //    		        else {
+  //    		          val storedSecond: Map[String, Integer] = ms.getOrElse(cr.seed, Map())
+  //    		          ms + (cr.seed -> (storedSecond ++ cr.second))
+  //    		        }
+  //    		      }
+  //    		    }.foreach({
+  //    		      case (seed, follow) => {
+  //    		        Future {
+  //    		          writeStats(dir, seed, follow)
+  //    		        }
+  //    		      }
+  //    		      case _ => {}
+  //    		    })
+  //    		  }
+  //    		  case Failure(error) => {
+  //    		    logger.error(s"Write cache failure", error)
+  //    		  }
+  //    		}
+//      // generalized for all gram sizes
+//      val inputStream = new BufferedReader(new InputStreamReader(uri.toURL().openStream(), "UTF-8"))
+//      Stream.continually(inputStream.readLine).takeWhile(_ != null).foreach(line => {
+//
+//      // after demo, can replace this with existing index check
       true
-  }
+	}
 }
+
+//class Processor(val outStr: PipedOutputStream, val uri: URI, val bufSize: Integer, val cLength: Long) extends Runnable with StrictLogging {
+//	// important that the buffer size on the stream itself is *larger* than our buffer size
+//	val inStr = new PipedInputStream(outStr, 800*1024*1024)
+//  var sBuf = scala.collection.mutable.Buffer
+//	var processed: Long = 0
+//  var prevEnd = 0
+//
+//  val pBuf = new scala.collection.mutable.Queue[Array[Byte]]
+//
+//	override
+//	def run(): Unit = {
+//  	val buffer = new Array[Byte](bufSize)
+//
+//    // val procBuffer = ByteBuffer.allocateDirect(800*1024*1024)
+//
+//		logger.info(s"Processing thread reading lines from ${uri.toString}")
+//
+//		while (processed < cLength) {
+//			// N.B. can't use buffer.size, not sure why
+//			val read = inStr.read(buffer, 0, bufSize)
+//
+//      var ix = 0
+//      while (ix < read) {
+//        if (buffer(ix) == 0x0a) {
+//          pBuf += buffer.slice(prevEnd,ix)
+//          prevEnd = ix
+//        }
+//        ix += 1
+//      }
+//
+//			processed += read
+//
+//
+//      // procBuffer.put(buffer, 0, read)
+//      // procBuffer.clear()
+//
+//			if (processed % 1024*1024 == 0) logger.debug(s"Processed ${processed} bytes so far of ${cLength}")
+//
+//		}
+//
+//		logger.info(s"Finished with ${uri.toString}. Processed: ${processed} of ${cLength}")
+//	}
+//}
 
 class Recorder(var prev: Option[(String, Integer)], var cache: List[(String, Integer)], var exhausted: Boolean) extends StrictLogging {
 

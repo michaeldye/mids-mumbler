@@ -8,7 +8,7 @@ import scala.io.Source
 import mumbler.remote.Writer
 import mumbler.remote.Recorder
 
-class ExampleSpec extends FlatSpec {
+class WriterSpec extends FlatSpec {
 
   // TODO: do cleanup after tests run
 	def fixture = new {
@@ -29,25 +29,26 @@ class ExampleSpec extends FlatSpec {
 		assert(Writer.indicesOf(has4, '\t') == List(11, 13, 15))
 	}
 
-  "recorder" should "cache lines with the same substring content" in {
-    val l1 = "fooo\tgoo"
-    val l2 = "fooo\tzoo"
-    val l3 = "BOOO\tnoo"
-    val l4 = "VOOOO\ttoo"
-
-    val recorder = new Recorder()
-    assert(recorder.record(l1, 4) == None)
-    assert(recorder.record(l2, 4) == None)
-    assert(recorder.record(l3, 4) == Some(List((l2, 4),(l1, 4))))
-
-    val recorder2 = new Recorder(recorder.prev)
-    // we're recording l4 but what is emitted should be l3 w/ its split index
-    assert(recorder2.record(l4, 5) == Some(List((l3, 4))))
-  }
-
-	"collect function" should "split primary records into cache jobs" in {
-		val f = fixture
-		val foo = Writer.collect(f.temp, f.records)
-
-  }
+// TODO: needs a real url and webserver
+//  "recorder" should "cache lines with the same substring content" in {
+//    val l1 = "fooo\tgoo"
+//    val l2 = "fooo\tzoo"
+//    val l3 = "BOOO\tnoo"
+//    val l4 = "VOOOO\ttoo"
+//
+//    val recorder = new Recorder()
+//    assert(recorder.record(l1, 4) == None)
+//    assert(recorder.record(l2, 4) == None)
+//    assert(recorder.record(l3, 4) == Some(List((l2, 4),(l1, 4))))
+//
+//    val recorder2 = new Recorder(recorder.prev)
+//    // we're recording l4 but what is emitted should be l3 w/ its split index
+//    assert(recorder2.record(l4, 5) == Some(List((l3, 4))))
+//  }
+//
+//	"collect function" should "split primary records into cache jobs" in {
+//		val f = fixture
+//		val foo = Writer.collect(f.temp, f.records)
+//
+//  }
 }
