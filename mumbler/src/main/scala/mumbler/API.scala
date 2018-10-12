@@ -85,6 +85,13 @@ class API(val bindAddress: String, val port: Int)(implicit val system: ActorSyst
         }
       }
     } ~
+    path("stats") {
+      get {
+        extractUpgradeToWebSocket { upgrade =>
+          complete(upgrade.handleMessagesWithSinkSource(Sink.ignore, statsSource(system, remotes)))
+        }
+      }
+    } ~
     pathPrefix("ui") {
       pathEndOrSingleSlash {
         getFromFile(Paths.get(sys.env("MARKOV_UI"), "index.html").toString())
@@ -108,6 +115,20 @@ class API(val bindAddress: String, val port: Int)(implicit val system: ActorSyst
       import GraphDSL.Implicits._
 
       val feedSource = Source.actorPublisher(Props(new ChainBuilder(max, word)(remotes)))
+      val messager = Flow[String].map(TextMessage(_))
+      val stream = feedSource ~> messager
+
+      SourceShape(stream.outlet)
+    }
+  }
+
+  // TODO: deduplicate code above
+  def statsSource(system: ActorSystem, remotes: Seq[ActorRef]): Graph[SourceShape[Message], Any] = {
+
+    GraphDSL.create() { implicit builder =>
+      import GraphDSL.Implicits._
+
+      val feedSource = Source.actorPublisher(Props(new StatsGatherer()(remotes)))
       val messager = Flow[String].map(TextMessage(_))
       val stream = feedSource ~> messager
 

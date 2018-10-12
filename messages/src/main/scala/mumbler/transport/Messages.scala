@@ -19,4 +19,6 @@ object Messages {
   case class Request(cmd: Cmd, chain: Seq[String]) extends Message
   case class Response(cmd: Cmd, chain: Seq[String], result: Option[Map[String, Int]]) extends Message
 
+  case class StatsRequest() extends Message
+  case class StatsResponse(result: Option[Map[String, Int]]) extends Message
 }

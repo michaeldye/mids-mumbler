@@ -30,11 +30,16 @@ class Agent extends Actor with ActorLogging {
   val dir = Paths.get(System.getenv("DATADIR"))
 	val fetcher = context.actorOf(Props[Fetcher].withDispatcher("dl-dispatcher"), name="Fetcher")
 
-  val badwordsPath = Paths.get(dir.toString(), "badwords.txt").toFile()
-  val badwords = Source.fromFile(badwordsPath).getLines.toList
-  val searcher = new Searcher(badwords)
+  val badwordsPath = Paths.get(dir.toString(), "badwords.txt").toFile
 
-  log.info(s"Bad words list loaded from ${badwordsPath}")
+  val badwords = {
+    if (badwordsPath.exists) {
+      log.info(s"Loading bad words list from ${badwordsPath}")
+      Source.fromFile(badwordsPath).getLines.toList
+    } else List()
+  }
+
+  val searcher = new Searcher(badwords)
 
   override
   def receive = {
@@ -55,6 +60,10 @@ class Agent extends Actor with ActorLogging {
         case _ =>
           log.info(s"Unexpected command: ${request.cmd}")
       }
+
+      case statsRequest: StatsRequest =>
+        log.info(s"Received stats request")
+        sender ! StatsResponse(Some(Map[String,Int]("someStat" -> 40)))
 
       case report: Report =>
         log.info(s"Received process report: $report")
