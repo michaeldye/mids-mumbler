@@ -45,9 +45,9 @@ class ExampleSpec extends FlatSpec {
     assert(recorder2.record(l4, 5) == Some(List((l3, 4))))
   }
 
-	"collect function" should "split primary records into cache jobs" in {
-		val f = fixture
-		val foo = Writer.collect(f.temp, f.records)
+	//"collect function" should "split primary records into cache jobs" in {
+	//	val f = fixture
+	//	val foo = Writer.collect(f.temp, f.records)
 
-  }
+  //}
 }

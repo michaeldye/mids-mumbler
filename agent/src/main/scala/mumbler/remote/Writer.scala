@@ -21,8 +21,15 @@ import java.util.concurrent.Executors
 import scala.annotation.tailrec
 import com.typesafe.scalalogging.StrictLogging
 
-import org.apache.http.client.fluent.Request
-
+import org.apache.http.HttpEntity;
+import org.apache.http.client.entity.UrlEncodedFormEntity;
+import org.apache.http.client.methods.CloseableHttpResponse;
+import org.apache.http.client.methods.HttpGet;
+import org.apache.http.client.methods.HttpPost;
+import org.apache.http.impl.client.CloseableHttpClient;
+import org.apache.http.impl.client.HttpClients;
+import org.apache.http.message.BasicNameValuePair;
+import org.apache.http.util.EntityUtils;
 /**
  * @author mdye
  */
@@ -127,7 +134,14 @@ object Writer extends StrictLogging {
       }
 
       // generalized for all gram sizes
-      val inputStream = new BufferedReader(new InputStreamReader(uri.toURL().openStream(), "UTF-8"))
+
+		  val response = HttpClients.createDefault().execute(new HttpGet(uri.toURL().toString()))
+      val entity = response.getEntity()
+      val cLength = entity.getContentLength()
+      val instream = entity.getContent()
+
+      try {
+      val inputStream = new BufferedReader(new InputStreamReader(instream, "UTF-8"))
       Stream.continually(inputStream.readLine).takeWhile(_ != null).foreach(line => {
           // We're dealing with indices in the line string not words b/c I gamble that it's more performant;
           // we'll leave the chopping out of substrings to the parallelized functions later
@@ -153,6 +167,14 @@ object Writer extends StrictLogging {
             }
           }
       })
+
+      } catch {
+        case ex: Exception => logger.error("Error reading and processing stream", ex)
+        case th: Throwable => logger.info("Thrown while processing", th)
+
+      } finally {
+        response.close();
+      }
 
       // handle the last line case, it may not have triggered a recorder match
       if (! recorder.cache.isEmpty) appendReduction()

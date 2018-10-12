@@ -2,6 +2,7 @@ lazy val common = Seq(
   organization := "com.tehlulz",
   version := "0.2.0",
   scalaVersion := "2.12.3",
+  compileOrder := CompileOrder.JavaThenScala,
   libraryDependencies ++= Seq(
     "com.typesafe.akka" %% "akka-http" % "10.1.5",
     "com.typesafe.akka" %% "akka-actor" % "2.5.6",
@@ -37,8 +38,9 @@ lazy val agent = (project in file("agent")).
     name := "mids_mumbler_agent",
     mainClass in (Compile, run) := Some("mumbler.remote.Listener"),
     libraryDependencies ++= Seq(
-      "org.apache.httpcomponents" % "httpclient" % "4.4.1",
-      "org.apache.httpcomponents" % "fluent-hc" % "4.4.1"
+      "org.apache.httpcomponents" % "httpclient" % "4.5.6",
+      "org.apache.httpcomponents" % "fluent-hc" % "4.5.6"
+      "org.slf4j" % "slf4j-api" % "1.7.25"
     )
   ).
   dependsOn(messages)
