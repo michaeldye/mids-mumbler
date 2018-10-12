@@ -21,6 +21,7 @@ class ExampleSpec extends FlatSpec {
 		// assert (Paths.get(".").toAbsolutePath().toString() == null )
 		val records = Paths.get("mumbler","src","test","resources","3gram-9-sub").toUri()
 		//assert (list.getRawPath() == null)
+		val gramzip = new URI("http://localhost:9008/googlebooks-eng-us-all-2gram-20090715-60.csv.zip")
 	}
 
 	"indicesOf" should "return indices of all tabs in string" in {
@@ -47,7 +48,6 @@ class ExampleSpec extends FlatSpec {
 
 	//"collect function" should "split primary records into cache jobs" in {
 	//	val f = fixture
-	//	val foo = Writer.collect(f.temp, f.records)
-
+	//	val foo = Writer.collect(f.temp, f.gramzip)
   //}
 }

@@ -162,7 +162,7 @@
       // run on load; TODO: cancel this when user moves mouse, set again after enough time has passed
 
     searchintervalVals = urlParams.getAll('searchinterval');
-    if (false) {
+    if (searchintervalVals.length > 0) {
 
       var autoSearch = window.setInterval(function() {
         var seed = seeds[Math.floor(Math.random() * (seeds.length - 0) + 0)];
@@ -174,7 +174,7 @@
     </script>
   </head>
   <body>
-    <h2>Markov Chains from English Literature Corpus (non-conversational)</h2>
+    <h2>Natural Language Processing with N-grams from English Literature</h2>
     <h3>IBM Watson and Cloud Platform / Applied Sciences Team</h3>
     <div id="input" style="margin-top: 2em;">
       <form id="seed" class="mui-form" action="#">
@@ -185,14 +185,14 @@
       </form>
     </div>
     <div id="output" style="margin-top: 1.4em;">
-      <p id="chain">fruit fritters served much departed leaves disappear easily perceived unless storage receptacles could recreate only purveyors was transgressed my neck</p>
+      <p id="chain"></p>
       <p id="tag"></p>
     </div>
 <hr />
     <div id="description" style="margin-top: 1em;">
-      <p>This demonstration uses Akka remote actors to process text on edge nodes. A <em>head</em> node on an Nvidia TX2 accepts an input <em>seed</em> word and appends successive words provided by remote nodes until a maximum word chain limit is reached. The process is then repeated with a new word.</p>
+      <p>This demonstration uses Akka remote actors to fetch N-gram source files produced from 6% of all published English language literature as of 2009. The N-gram source files are then processed into indices and stored on worker nodes.</p>
+      <p>While processing, the <em>head</em> node will accept a <em>seed</em> word as input and generate a Markov Chain of following words, selecting them from the indexed data weighted by occurrence frequency in the corpus. A chain is built by appending successive words provided by worker nodes until a maximum word chain limit is reached. The process is then repeated with a new word.</p>
       <p>When a remote actor is queried to provide a list of following words given an antecedent, it processes a local copy of English language literary texts and returns a the list of words along with the frequency of their occurrence in the corpus. The head node selects a following word at random but weighted by the frequency of occurence of the following word.</p>
-      <p>The corpus used is distributed among the remote nodes and is 96 Gigabytes in size.</p>
     </div>
   </body>
 </html>

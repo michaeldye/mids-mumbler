@@ -18,18 +18,13 @@ import scala.concurrent._
 import scala.concurrent.duration.DurationInt
 import java.util.concurrent.Executors
 
+import java.util.zip.ZipInputStream
+
 import scala.annotation.tailrec
 import com.typesafe.scalalogging.StrictLogging
 
-import org.apache.http.HttpEntity;
-import org.apache.http.client.entity.UrlEncodedFormEntity;
-import org.apache.http.client.methods.CloseableHttpResponse;
-import org.apache.http.client.methods.HttpGet;
-import org.apache.http.client.methods.HttpPost;
-import org.apache.http.impl.client.CloseableHttpClient;
-import org.apache.http.impl.client.HttpClients;
-import org.apache.http.message.BasicNameValuePair;
-import org.apache.http.util.EntityUtils;
+import org.apache.http.client.fluent.Request
+
 /**
  * @author mdye
  */
@@ -38,6 +33,8 @@ object Writer extends StrictLogging {
   // a bit loose right now, we're probably bound by i/o before cpu with the writer's work
   val numWorkers = sys.runtime.availableProcessors
   val pool = Executors.newFixedThreadPool(numWorkers)
+
+  val legalWord = Pattern.compile("^[A-Za-z][A-Za-z0-9]*")
 
   implicit val ec = ExecutionContext.fromExecutorService(pool)
 
@@ -54,11 +51,6 @@ object Writer extends StrictLogging {
     writer.close()
   }
 
-  def readableWord(word: String): String = {
-    val cleaner = if (word.toUpperCase().equals(word)) word.toLowerCase() else word
-    return cleaner.split("_")(0)
-  }
-
   // not tail recursive: we expect input string to always have fewer \t's than the JVM has stack frames
   def indicesOf(str: String, sep: Char): List[Integer] = {
 
@@ -71,7 +63,11 @@ object Writer extends StrictLogging {
     index0(str, 0)
   }
 
-  def fromSplit(word: String, begX: Integer, endX: Integer) = word.substring(begX, endX).split("_")(0)
+  def readableWord(word: String): String = word.toLowerCase()
+
+  def fromSplit(word: String, begX: Integer, endX: Integer): String = {
+    word.substring(begX, endX)
+  }
 
   // return: firstword, secondword, ct
   def lineProcess(cached: (String, Integer)): Option[(String, String, Integer)] = {
@@ -79,17 +75,16 @@ object Writer extends StrictLogging {
     val line = cached._1
     indicesOf(line, '\t') match {
       case gramIx :: yearIx :: countIx :: _ => {
-        val gram = line.substring(0, gramIx)
+        val gram = line.substring(0, gramIx).split(" ")
 
-        indicesOf(gram, ' ') match {
-          case oneIx :: twoIx :: _ => {
-            val one = fromSplit(gram, 0, oneIx)
-            val two = fromSplit(gram, oneIx+1, twoIx)
-
-            if (! List(one,two).forall { Pattern.matches("^[A-Za-z0-9][A-Za-z0-9.]+", _) }) None
-            else Some((one, two, line.substring(yearIx+1, countIx).toInt))
+        if (gram.size != 2) None
+        else {
+          val one = gram(0)
+          val two = gram(1)
+          if (List(one,two).forall { legalWord.matcher(_).matches() }) {
+            Some((readableWord(one), readableWord(two), line.substring(yearIx+1, countIx).toInt))
           }
-          case _ => None
+          else None
         }
       }
       case _ => None
@@ -103,10 +98,10 @@ object Writer extends StrictLogging {
 
       val first = {
         val top = recorder.cache.head
-        fromSplit(top._1, 0, top._2)
+        readableWord(fromSplit(top._1, 0, top._2))
       }
 
-      val reduced = recorder.cache.map(lineProcess).flatten.foldLeft(Map[String, Integer]()) {
+      val reduced = recorder.cache.flatMap(lineProcess).foldLeft(Map[String, Integer]()) {
         case (m: Map[String, Integer], t: (String, String, Integer)) => {
           val recorded: Integer = m.getOrElse(t._2, 0)
           val ct = t._3 + recorded
@@ -133,48 +128,41 @@ object Writer extends StrictLogging {
         cacheReductions = reduceCache(recorder) :: cacheReductions
       }
 
-      // generalized for all gram sizes
+      val legalLine = Pattern.compile("^[ \t\nA-Za-z0-9]*")
 
-		  val response = HttpClients.createDefault().execute(new HttpGet(uri.toURL().toString()))
-      val entity = response.getEntity()
-      val cLength = entity.getContentLength()
-      val instream = entity.getContent()
+      val zin = new ZipInputStream(Request.Get(uri).execute.returnContent.asStream)
 
-      try {
-      val inputStream = new BufferedReader(new InputStreamReader(instream, "UTF-8"))
-      Stream.continually(inputStream.readLine).takeWhile(_ != null).foreach(line => {
-          // We're dealing with indices in the line string not words b/c I gamble that it's more performant;
-          // we'll leave the chopping out of substrings to the parallelized functions later
+      Stream.continually(zin.getNextEntry).takeWhile(_ != null).foreach(entry => {
+        val entryBuffer = new BufferedReader(new InputStreamReader(zin, "UTF-8"))
+        Stream.continually(entryBuffer.readLine).takeWhile(_ != null).foreach(line => {
 
-          indicesOf(line, '\t') match {
-            case Nil => logger.error(s"Malformed line in input w/r/t stats: ${line}")
-            case ix1 :: _ => {
-              val grams = line.substring(0, ix1)
+          // throw out early
+          if (legalLine.matcher(line).matches()) {
+            indicesOf(line, '\t') match {
+              case Nil => logger.debug(s"Malformed line in input w/r/t stats: ${line}")
+              case ix1 :: _ => {
+                val grams = line.substring(0, ix1)
 
-              // it's a legitimate line w/r/t stats, separate the grams now
-              indicesOf(grams, ' ') match {
-                case Nil => logger.error(s"Malformed line in input w/r/t grams: ${grams}")
-                case wx1 :: _ => {
-                  recorder.record(line, wx1) match {
-                    case Some(_) => {
-                      appendReduction()
-                      recorder = new Recorder(recorder.prev)
+                // it's a legitimate line w/r/t stats, separate the grams now
+                indicesOf(grams, ' ') match {
+                  case Nil => {} // logger.error(s"Malformed line in input w/r/t grams: ${grams}")
+                  case wx1 :: _ => {
+                    recorder.record(line, wx1) match {
+                      case Some(_) => {
+                        appendReduction()
+                        recorder = new Recorder(recorder.prev)
+                      }
+                      case _ => {}
                     }
-                    case _ => {}
                   }
                 }
               }
             }
+          } else {
+            logger.debug(s"Rejected line: ${line}")
           }
+        })
       })
-
-      } catch {
-        case ex: Exception => logger.error("Error reading and processing stream", ex)
-        case th: Throwable => logger.info("Thrown while processing", th)
-
-      } finally {
-        response.close();
-      }
 
       // handle the last line case, it may not have triggered a recorder match
       if (! recorder.cache.isEmpty) appendReduction()
@@ -186,7 +174,7 @@ object Writer extends StrictLogging {
         case Success(result) => {
           result.foreach { c: CacheReduction =>
             // TODO: send stats back; also combine with below
-            logger.info(s"Cache reduction success; processed line count: ${c.processed}, indexed: ${c.indexed}")
+            // logger.debug(s"Cache reduction success; processed line count: ${c.processed}, indexed: ${c.indexed}")
           }
 
           // do the last, group reduction
@@ -208,7 +196,7 @@ object Writer extends StrictLogging {
           })
         }
         case Failure(error) => {
-          logger.info(s"Write cache failure: ${error}")
+          logger.error("Write cache failure", error)
         }
       }
 

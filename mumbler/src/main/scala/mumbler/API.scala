@@ -39,7 +39,7 @@ object Launch extends App with StrictLogging {
     def resolveRemote(host: String, port: Int): ActorRef = {
       val duration = Duration.create(30, TimeUnit.SECONDS)
       implicit val timeout = Timeout(duration)
-      val remote = Await.result(system.actorSelection(s"akka://RemoteMumbler@${host}:${port}/user/Agent").resolveOne(), duration)
+      val remote = Await.result(system.actorSelection(s"akka.tcp://RemoteMumbler@${host}:${port}/user/Agent").resolveOne(), duration)
       logger.info(s"Remote: ${remote}")
       remote
     }
@@ -56,15 +56,12 @@ object Launch extends App with StrictLogging {
   // TODO: send some data via WS to UI about the # of workers
   def callback(downloaded: Int): Unit = {
 
-    if (downloaded == filesCt) {
-      val ws = args(1).split(":")
-      val api = new API(ws(0), ws(1).toInt)
-      logger.info(s"API listening on ${ws(0)}:${ws(1)}")
-    } else {
-      val waitCt = filesCt - downloaded
-      logger.info(s"Waiting on processing of ${waitCt}/${filesCt} by remotes before starting API")
-    }
+    if (downloaded != filesCt) logger.info(s"Processed ${downloaded}/${filesCt} by remotes")
   }
+
+  val ws = args(1).split(":")
+  val api = new API(ws(0), ws(1).toInt)
+  logger.info(s"API listening on ${ws(0)}:${ws(1)}")
 
   // upon construction will send messages to all remotes to download source files
   system.actorOf(Props(new Downloader(filesCt, callback, remotes)), name = "Downloader")
