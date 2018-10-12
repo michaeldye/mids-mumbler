@@ -7,6 +7,7 @@ import java.nio.file.Path
 import java.nio.file.Paths
 import java.nio.ByteBuffer
 import java.util.regex.Pattern
+import java.util.stream._
 
 import java.util.concurrent.{ForkJoinPool, ThreadFactory}
 import java.util.concurrent.atomic.AtomicLong
@@ -49,8 +50,7 @@ object Writer extends StrictLogging {
 	//	}
 	//)
 
-  val preProcessingThreadPool = Executors.newFixedThreadPool(2)
-  val streamingDownloadThreadPool = Executors.newFixedThreadPool(1)
+  val processingThreadPool = Executors.newFixedThreadPool(4)
 
   // separate from the processing thread, this one downloads
 	implicit val ec = ExecutionContext.fromExecutor(new ForkJoinPool())
@@ -146,71 +146,52 @@ object Writer extends StrictLogging {
     }
   }
 
-  def collect(dir: Path, uri: URI): Boolean = {
-      var cacheReductions = List[CacheReduction]()
+  def collect(dir: Path, uri: URI): Future[Boolean] = {
+ //     var cacheReductions = List[CacheReduction]()
 
       // we'll have one collect method per dl actor (which are pooled), then
       // that will use a singleton recorder instance that has its own futures -
       // based reducers. The final reduction will be single-threaded here again
       // and we'll reuse the reducer pool to do concurrent writes.
-      var recorder = new Recorder()
+//      var recorder = new Recorder()
 
       // used for side effects, a little ugly
-      def appendReduction(): Unit = {
-        cacheReductions = reduceCache(recorder) :: cacheReductions
-      }
+//      def appendReduction(): Unit = {
+//        cacheReductions = reduceCache(recorder) :: cacheReductions
+//      }
 
 			logger.info(s"Issuing request to ${uri.toString}")
 
-      val outStr = new PipedOutputStream()
-      val queue = new java.util.concurrent.ConcurrentLinkedQueue[java.lang.String]()
+      // TODO: add some async process here that processes a queue of stats from the java part;
+      // need to refactor some of this so that those stats can be streamed back to the head node via akka
 
-			val bufSize = 9100
+      val statsQueue = new java.util.concurrent.LinkedTransferQueue[java.lang.String]()
 
-			val response = HttpClients.createDefault().execute(new HttpGet(uri.toURL.toString))
-			val entity = response.getEntity
-			val instream = entity.getContent
-			val cLength = entity.getContentLength
+      // blocks until done
 
-			preProcessingThreadPool.execute(new PreProcessor(outStr, uri, bufSize, cLength, queue))
+      Future {
+        // returns a bool after completion; java .get() call blocks
+        (new Processor(processingThreadPool, uri, statsQueue)).process().get()
 
-      streamingDownloadThreadPool.execute(new Runnable {
-    	  val buffer = new Array[Byte](bufSize)
-
-        def run() {
-          try {
-			      logger.info(s"Locally caching data from ${uri.toString}")
-			      var xferred: Long = 0
-			      while (xferred < cLength) {
-              val read = instream.read(buffer)
-
-			      	if (xferred % (1024*1024*512) == 0) logger.info(s"Read from HTTP stream ${xferred} bytes so far of ${cLength} for ${uri.toString}")
-              outStr.write(buffer, 0, read)
-              xferred += read
-			      }
-
-          } catch {
-			    	case e: Exception => logger.error(e.toString)
-			    } finally {
-
-			      instream.close()
-			      outStr.close()
-			      response.close()
-			    }
-        }
-      })
-
-      val reduce = Future {
-        logger.info(s"Beginning line stream consumption of preprocessed data from ${uri.toString}")
-
-        // Stream.continually(queue.take()).foreach(line => {  })
-
-        logger.info(s"Finished reduction of data from ${uri.toString}")
-
-        true
       }
 
-      Await.result(reduce, Duration.Inf)
+
+      // gonna do this in java instead so we don't have to convert streams
+
+      //val reduce = Future {
+      //  logger.info(s"Beginning line stream consumption of preprocessed data from ${uri.toString}")
+
+      //  val stream: Stream[java.lang.Stream] = outstreamBld.build()
+      //  stream.forEach()
+
+      //  // Stream.continually(queue.take()).foreach(line => {  })
+
+      //  logger.info(s"Finished reduction of data from ${uri.toString}")
+
+      //  true
+      //}
+
+      //Await.result(reduce, Duration.Inf)
 	}
 }
 

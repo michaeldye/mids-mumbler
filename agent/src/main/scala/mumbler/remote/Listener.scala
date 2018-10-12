@@ -3,12 +3,13 @@ package mumbler.remote
 import java.nio.file.Path
 import java.nio.file.Paths
 import java.net.URI
-import java.util.concurrent.TimeUnit
+import java.util.concurrent.ForkJoinPool
 
 import scala.io.Source
 import scala.concurrent.duration.FiniteDuration
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.{Future, ExecutionContext}
 import scala.concurrent.Await
+import scala.util.{Success, Failure}
 
 import akka.actor.{Actor,ActorRef}
 import akka.actor.ActorLogging
@@ -40,6 +41,7 @@ class Agent extends Actor with ActorLogging {
   def receive = {
     case dl: Download =>
       log.info(s"Received dl '$dl'")
+
 			fetcher ! Process(dir, dl.target, sender)
 
     case request: Request =>
@@ -62,13 +64,24 @@ class Agent extends Actor with ActorLogging {
 }
 
 class Fetcher extends Actor with ActorLogging {
+  implicit val ec = ExecutionContext.fromExecutorService(new ForkJoinPool())
 
 	override
 	def receive = {
 		case process: Process =>
 			log.info(s"Received process $process")
       // will always write index files; doesn't skip already-processed ones like before (demo feature)
-      if (Writer.collect(process.dir, process.target)) process.origin ! Report(s"Fetched and preprocessed content", true, process.target)
+      //if (Writer.collect(process.dir, process.target)) process.origin ! Report(s"Fetched and preprocessed content", true, process.target)
+
+
+      // TODO: this future seems right, but it looks like we'll still get timeouts and there are way too many dl's scheduled at once
+      val fut: Future[Boolean] = Writer.collect(process.dir, process.target)
+      fut.onComplete({
+        case Success(s) => process.origin ! Report(s"Fetched and preprocessed content", true, process.target)
+        case Failure(s) => // TODO: requeue?
+      });
+
+
 	}
 }
 
