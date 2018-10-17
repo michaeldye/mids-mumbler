@@ -10,13 +10,17 @@ import scala.util.Success
 
 import com.typesafe.scalalogging.StrictLogging
 
+import spray.json._
+
 import akka.actor.ActorRef
 import akka.actor.ActorSystem
 import akka.actor.Props
 import akka.http.scaladsl.Http
+import akka.http.scaladsl.common._
 import akka.http.scaladsl.model.ws.Message
 import akka.http.scaladsl.model.ws.TextMessage
 import akka.http.scaladsl.server.Directives
+import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport
 import akka.stream.ActorMaterializer
 import akka.stream.Graph
 import akka.stream.SourceShape
@@ -25,6 +29,8 @@ import akka.stream.scaladsl.GraphDSL
 import akka.stream.scaladsl.Sink
 import akka.stream.scaladsl.Source
 import akka.util.Timeout
+import akka.NotUsed
+
 
 object Launch extends App with StrictLogging {
   implicit val system = ActorSystem("Mumbler")
@@ -68,11 +74,14 @@ object Launch extends App with StrictLogging {
 
 }
 
-class API(val bindAddress: String, val port: Int)(implicit val system: ActorSystem, implicit val remotes: Seq[ActorRef]) extends Directives with StrictLogging {
+class API(val bindAddress: String, val port: Int)(implicit val system: ActorSystem, implicit val remotes: Seq[ActorRef]) extends Directives with StrictLogging with SummaryJsonSupport {
+
+	implicit val jsonStreamingSupport: JsonEntityStreamingSupport = EntityStreamingSupport.json().withParallelMarshalling(parallelism = 8, unordered = false)
 
   implicit val materializer = ActorMaterializer()
   // needed for the future flatMap/onComplete in the end
   implicit val executionContext = system.dispatcher
+
 
   // TODO: ??? add another route here to handle UI reporting # of workers, qty of data processed
   val route =
@@ -82,6 +91,13 @@ class API(val bindAddress: String, val port: Int)(implicit val system: ActorSyst
 
           // do this before all words are collected b/c we want to publish them on the socket as they arrive
           complete(upgrade.handleMessagesWithSinkSource(Sink.ignore, chainSource(system, remotes, chainMax, word)))
+        }
+      }
+    } ~
+    path("stats") {
+      get {
+        extractUpgradeToWebSocket { upgrade =>
+          complete(upgrade.handleMessagesWithSinkSource(Sink.ignore, statsSource(system, remotes)))
         }
       }
     } ~
@@ -110,6 +126,22 @@ class API(val bindAddress: String, val port: Int)(implicit val system: ActorSyst
       val feedSource = Source.actorPublisher(Props(new ChainBuilder(max, word)(remotes)))
       val messager = Flow[String].map(TextMessage(_))
       val stream = feedSource ~> messager
+
+      SourceShape(stream.outlet)
+    }
+  }
+
+  // TODO: deduplicate code above
+  def statsSource(system: ActorSystem, remotes: Seq[ActorRef]): Graph[SourceShape[Message], Any] = {
+
+    GraphDSL.create() { implicit builder =>
+      import GraphDSL.Implicits._
+
+      val feedSource = Source.actorPublisher(Props(new StatsGatherer()(remotes)))
+			// TODO need to abstract this so it can be used with other summary types
+			val serializedSource = Flow[Summary].map(_.toJson.toString)
+      val messager = Flow[String].map(TextMessage(_))
+      val stream = feedSource.via(serializedSource) ~> messager
 
       SourceShape(stream.outlet)
     }

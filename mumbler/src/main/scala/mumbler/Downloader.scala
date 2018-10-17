@@ -15,9 +15,11 @@ class Downloader(val filesCt: Int, val apiFn: (Int) => Unit, val remotes: Seq[Ac
   log.info(s"Preprocessing ${filesCt} source data files")
 
   var fileSuccessCount = 0
+  val uriBase = sys.env("FETCH_PRI_URIBASE")
 
   (0 until filesCt).map(ix => {
-    val message = Download(new URI(s"http://storage.googleapis.com/books/ngrams/books/googlebooks-eng-us-all-2gram-20090715-${ix}.csv.zip"))
+    // TODO: fix path composition
+    val message = Download(new URI(s"${uriBase}/googlebooks-eng-us-all-2gram-20090715-${ix}.csv.zip"))
 
       val clusterAssignment = (ix % remotes.size)
       // log.info(s"sending dl ${message} to ${clusterAssignment}")

@@ -9,7 +9,7 @@ import java.io.BufferedReader
 /**
  * @author mdye
  */
-class Searcher(val badWords: Seq[String]) extends StrictLogging {
+class Searcher(val badwords: Seq[String]) extends StrictLogging {
 
   def findFollowing(dir: Path, word: String): Option[Map[String, Int]] = {
     val wordFile = new File(dir.toFile, word)
@@ -20,7 +20,7 @@ class Searcher(val badWords: Seq[String]) extends StrictLogging {
       Some(Stream.continually(reader.readLine).takeWhile { _ != null }.foldLeft(Map[String, Int]()){ (map, line) =>
         line.split(" ") match {
           case Array(word: String, count: String) => {
-            if (badWords.contains(word.toLowerCase())) {
+            if ((!badwords.isEmpty) && badwords.contains(word.toLowerCase())) {
               logger.debug(s"Excluding word because it appears in badwords list: ${word}, occurrences: ${count}")
               map
             } else map.updated(word, count.toInt)

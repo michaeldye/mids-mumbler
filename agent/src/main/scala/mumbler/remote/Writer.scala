@@ -38,7 +38,7 @@ object Writer extends StrictLogging {
 
   implicit val ec = ExecutionContext.fromExecutorService(pool)
 
-  def writeStats(dir: Path, word: String, follow: Map[String, Integer]): Unit = {
+  def writeStats(dir: Path, word: String, follow: Map[String, Int]): Unit = {
     val out: File = Paths.get(dir.toAbsolutePath().toString(), word).toFile
     out.getParentFile.mkdirs
 
@@ -52,10 +52,10 @@ object Writer extends StrictLogging {
   }
 
   // not tail recursive: we expect input string to always have fewer \t's than the JVM has stack frames
-  def indicesOf(str: String, sep: Char): List[Integer] = {
+  def indicesOf(str: String, sep: Char): List[Int] = {
 
-    def index0(str: String, ix: Integer): List[Integer] = {
-      if (str.isEmpty) List[Integer]()
+    def index0(str: String, ix: Int): List[Int] = {
+      if (str.isEmpty) List[Int]()
       else if (str.head == sep) ix :: index0(str.tail, ix + 1)
       else index0(str.tail, ix + 1)
     }
@@ -65,12 +65,12 @@ object Writer extends StrictLogging {
 
   def readableWord(word: String): String = word.toLowerCase()
 
-  def fromSplit(word: String, begX: Integer, endX: Integer): String = {
+  def fromSplit(word: String, begX: Int, endX: Int): String = {
     word.substring(begX, endX)
   }
 
   // return: firstword, secondword, ct
-  def lineProcess(cached: (String, Integer)): Option[(String, String, Integer)] = {
+  def lineProcess(cached: (String, Int)): Option[(String, String, Int)] = {
 
     val line = cached._1
     indicesOf(line, '\t') match {
@@ -101,9 +101,9 @@ object Writer extends StrictLogging {
         readableWord(fromSplit(top._1, 0, top._2))
       }
 
-      val reduced = recorder.cache.flatMap(lineProcess).foldLeft(Map[String, Integer]()) {
-        case (m: Map[String, Integer], t: (String, String, Integer)) => {
-          val recorded: Integer = m.getOrElse(t._2, 0)
+      val reduced = recorder.cache.flatMap(lineProcess).foldLeft(Map[String, Int]()) {
+        case (m: Map[String, Int], t: (String, String, Int)) => {
+          val recorded: Int = m.getOrElse(t._2, 0)
           val ct = t._3 + recorded
           m + (t._2 -> ct)
         }
@@ -178,11 +178,11 @@ object Writer extends StrictLogging {
           }
 
           // do the last, group reduction
-          result.foldLeft(Map[String, Map[String, Integer]]()) {
-            case (ms: Map[String, Map[String, Integer]], cr: CacheReduction) => {
+          result.foldLeft(Map[String, Map[String, Int]]()) {
+            case (ms: Map[String, Map[String, Int]], cr: CacheReduction) => {
               if (cr.second.isEmpty) ms
               else {
-                val storedSecond: Map[String, Integer] = ms.getOrElse(cr.seed, Map())
+                val storedSecond: Map[String, Int] = ms.getOrElse(cr.seed, Map())
                 ms + (cr.seed -> (storedSecond ++ cr.second))
               }
             }
@@ -205,13 +205,13 @@ object Writer extends StrictLogging {
   }
 }
 
-class Recorder(var prev: Option[(String, Integer)], var cache: List[(String, Integer)], var exhausted: Boolean) extends StrictLogging {
+class Recorder(var prev: Option[(String, Int)], var cache: List[(String, Int)], var exhausted: Boolean) extends StrictLogging {
 
   def this() {
-    this(None, List[(String, Integer)](), false)
+    this(None, List[(String, Int)](), false)
   }
 
-  def this(prev: Option[(String, Integer)]) {
+  def this(prev: Option[(String, Int)]) {
     this()
     this.prev = prev
 
@@ -225,7 +225,7 @@ class Recorder(var prev: Option[(String, Integer)], var cache: List[(String, Int
     }
   }
 
-  def record(line: String, ix: Integer): Option[List[(String, Integer)]] = {
+  def record(line: String, ix: Int): Option[List[(String, Int)]] = {
     if (exhausted) throw new IllegalStateException("Recorder already exhausted")
 
     val oprev = prev
@@ -247,5 +247,5 @@ class Recorder(var prev: Option[(String, Integer)], var cache: List[(String, Int
   }
 }
 
-case class CacheReduction(processed: Integer, indexed: Integer, seed: String, second: Map[String, Integer])
+case class CacheReduction(processed: Int, indexed: Int, seed: String, second: Map[String, Int])
 

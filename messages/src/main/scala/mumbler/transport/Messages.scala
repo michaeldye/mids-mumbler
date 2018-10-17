@@ -2,6 +2,8 @@ package mumbler.transport
 
 import java.net._
 
+import scala.reflect.runtime.universe._
+
 /**
  * @author mdye
  */
@@ -19,4 +21,12 @@ object Messages {
   case class Request(cmd: Cmd, chain: Seq[String]) extends Message
   case class Response(cmd: Cmd, chain: Seq[String], result: Option[Map[String, Int]]) extends Message
 
+  abstract class StatsResult() {
+    val ts = System.currentTimeMillis
+  }
+
+  case class Indexed(totalSourceBytes: Int, totalIndexBytes: Int, totalIndexMillis: Long) extends StatsResult
+
+  case class StatsRequest() extends Message
+  case class StatsResponse(result: Option[StatsResult]) extends Message
 }
