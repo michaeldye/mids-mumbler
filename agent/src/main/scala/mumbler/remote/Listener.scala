@@ -63,7 +63,7 @@ class Agent extends Actor with ActorLogging {
 
       case statsRequest: StatsRequest =>
         log.info(s"Received stats request")
-        sender ! StatsResponse(Some(Map[String,Int]("someStat" -> 40)))
+        sender ! StatsResponse(Some(Indexed(totalSourceBytes=1000, totalIndexBytes=100, totalIndexMillis=150568)))
 
       case report: Report =>
         log.info(s"Received process report: $report")

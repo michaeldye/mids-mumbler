@@ -3,6 +3,11 @@ lazy val common = Seq(
   version := "0.3.0-SNAPSHOT",
   scalaVersion := "2.12.3",
   compileOrder := CompileOrder.JavaThenScala,
+	javaOptions in Test += s"-Dconfig.file=${sourceDirectory.value}/test/resources/application.conf",
+  maxErrors := 5,
+  triggeredMessage in ThisBuild := Watched.clearWhenTriggered,
+	fork in Test := true,
+  cancelable in Global := true,
   libraryDependencies ++= Seq(
     "com.typesafe.akka" %% "akka-http" % "10.1.5",
     "com.typesafe.akka" %% "akka-actor" % "2.5.6",
@@ -28,7 +33,11 @@ lazy val mumbler = (project in file("mumbler")).
   settings(common: _*).
   settings(
     name := "mids_mumbler",
-    mainClass in (Compile, run) := Some("mumbler.Launch")
+    mainClass in (Compile, run) := Some("mumbler.Launch"),
+    libraryDependencies ++= Seq(
+      "com.typesafe.akka" %% "akka-http-spray-json" % "10.1.5",
+			"com.typesafe.akka" %% "akka-testkit" % "2.5.6" % Test
+    )
   ).
   dependsOn(messages)
 

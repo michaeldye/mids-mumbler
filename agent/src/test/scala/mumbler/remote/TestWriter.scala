@@ -8,7 +8,7 @@ import scala.io.Source
 import mumbler.remote.Writer
 import mumbler.remote.Recorder
 
-class ExampleSpec extends FlatSpec {
+class TestWriterSpec extends FlatSpec {
 
   // TODO: do cleanup after tests run
 	def fixture = new {
