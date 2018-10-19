@@ -12,9 +12,8 @@ import java.nio.file.Path
 import java.nio.file.Paths
 import java.util.regex.Pattern
 
-import scala.util.Success
-import scala.util.Failure
-import scala.concurrent._
+import scala.util.{Try, Success, Failure}
+import scala.concurrent.{Await, Future, ExecutionContext}
 import scala.concurrent.duration.DurationInt
 import java.util.concurrent.Executors
 
@@ -38,17 +37,24 @@ object Writer extends StrictLogging {
 
   implicit val ec = ExecutionContext.fromExecutorService(pool)
 
-  def writeStats(dir: Path, word: String, follow: Map[String, Int]): Unit = {
-    val out: File = Paths.get(dir.toAbsolutePath().toString(), word).toFile
-    out.getParentFile.mkdirs
+  def writeIndex(dir: Path, word: String, follow: Map[String, Int]): Future[Try[_]] = {
+    Future {
+      val out: File = Paths.get(dir.toAbsolutePath().toString(), word).toFile
+      out.getParentFile.mkdirs
 
-    val writer = new PrintWriter(new BufferedWriter(new FileWriter(out)))
+      val writer = new PrintWriter(new BufferedWriter(new FileWriter(out)))
 
-    follow.foreach { entry =>
-      writer.println(s"${entry._1} ${entry._2}")
+      val tried = Try {
+        follow.foreach { entry =>
+          writer.println(s"${entry._1} ${entry._2}")
+        }
+      } recover {
+        case t: Throwable => Failure(t)
+      }
+
+      writer.close()
+      tried
     }
-
-    writer.close()
   }
 
   // not tail recursive: we expect input string to always have fewer \t's than the JVM has stack frames
@@ -92,10 +98,9 @@ object Writer extends StrictLogging {
   }
 
   def reduceCache(recorder: Recorder): Future[CacheReduction] = {
+
+    // lets exceptions bubble out, gonna later convert those to Future[Try...]
     Future {
-
-      if (recorder.cache.isEmpty) throw new IllegalStateException("Got recorder that was empty and shouldn't have been")
-
       val first = {
         val top = recorder.cache.head
         readableWord(fromSplit(top._1, 0, top._2))
@@ -114,7 +119,7 @@ object Writer extends StrictLogging {
     }
   }
 
-  def collect(dir: Path, uri: URI): Boolean = {
+  def collect(dir: Path, uri: URI): (Int, Int, Future[Iterable[Try[_]]]) = {
       var cacheReductions = List[Future[CacheReduction]]()
 
       // we'll have one collect method per dl actor (which are pooled), then
@@ -133,6 +138,7 @@ object Writer extends StrictLogging {
       val zin = new ZipInputStream(Request.Get(uri).execute.returnContent.asStream)
 
       Stream.continually(zin.getNextEntry).takeWhile(_ != null).foreach(entry => {
+
         val entryBuffer = new BufferedReader(new InputStreamReader(zin, "UTF-8"))
         Stream.continually(entryBuffer.readLine).takeWhile(_ != null).foreach(line => {
 
@@ -167,41 +173,31 @@ object Writer extends StrictLogging {
       // handle the last line case, it may not have triggered a recorder match
       if (! recorder.cache.isEmpty) appendReduction()
 
-      val results = Future.sequence(cacheReductions)
-
-      // TODO: could use some untangling
-      results.onComplete {
-        case Success(result) => {
-          result.foreach { c: CacheReduction =>
-            // TODO: send stats back; also combine with below
-            // logger.debug(s"Cache reduction success; processed line count: ${c.processed}, indexed: ${c.indexed}")
-          }
-
-          // do the last, group reduction
-          result.foldLeft(Map[String, Map[String, Int]]()) {
-            case (ms: Map[String, Map[String, Int]], cr: CacheReduction) => {
-              if (cr.second.isEmpty) ms
-              else {
-                val storedSecond: Map[String, Int] = ms.getOrElse(cr.seed, Map())
-                ms + (cr.seed -> (storedSecond ++ cr.second))
-              }
-            }
-          }.foreach({
-            case (seed, follow) => {
-              Future {
-                writeStats(dir, seed, follow)
-              }
-            }
-            case _ => {}
-          })
-        }
-        case Failure(error) => {
-          logger.error("Write cache failure", error)
-        }
+      // Future.sequence will complete all included Futures and return a single Future wrapping a traversable
+      val distReductions = Future.sequence(cacheReductions)
+      val aggregated = finalReduction(distReductions)
+      val writeOps = aggregated.index.map {
+        case (word, follow) => writeIndex(dir, word, follow)
       }
 
-      // after demo, can replace this with existing index check
-      true
+
+      (aggregated.totalProcessed, aggregated.totalIndexed, Future.sequence(writeOps))
+  }
+
+  def finalReduction(distReductions: Future[Seq[CacheReduction]]): AggregatedCacheReductions = {
+
+    Await.result(distReductions, 10.minutes).foldLeft(AggregatedCacheReductions.empty)({
+      case (acc: AggregatedCacheReductions, next: CacheReduction) => {
+        val pr = acc.totalProcessed + next.processed
+        val ind = acc.totalIndexed + next.indexed
+
+        if (next.second.isEmpty) AggregatedCacheReductions(pr, ind, acc.index)
+        else {
+          val storedSecond: Map[String, Int] = acc.index.getOrElse(next.seed, Map.empty[String, Int])
+          AggregatedCacheReductions(pr, ind, acc.index + (next.seed -> (storedSecond ++ next.second)))
+        }
+      }
+    })
   }
 }
 
@@ -249,3 +245,14 @@ class Recorder(var prev: Option[(String, Int)], var cache: List[(String, Int)], 
 
 case class CacheReduction(processed: Int, indexed: Int, seed: String, second: Map[String, Int])
 
+case class AggregatedCacheReductions(totalProcessed: Int, totalIndexed: Int, index: Map[String, Map[String, Int]])
+
+object AggregatedCacheReductions {
+  def apply(tp: Int, ti: Int, index: Map[String, Map[String, Int]]): AggregatedCacheReductions = {
+    return new AggregatedCacheReductions(tp, ti, index)
+  }
+
+  def empty(): AggregatedCacheReductions = {
+    return new AggregatedCacheReductions(0, 0, Map.empty[String, Map[String, Int]])
+  }
+}

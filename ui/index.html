@@ -9,14 +9,14 @@
     <style>
       body {
         margin: 5em;
-	margin-top: .3em;
+        margin-top: .3em;
       }
 
       div, span {
         color: #555;
         font-family: 'Helvetica Neue', 'Open Sans', Arial, sans-serif;
         font-size: 16pt;
-	line-height: 30pt;
+        line-height: 30pt;
       }
 
       h2 {
@@ -35,9 +35,9 @@
       }
 
       #description p {
-	color: #777;
-	font-size: 11pt;
-	line-height: 16pt;
+        color: #777;
+        font-size: 11pt;
+        line-height: 16pt;
       }
 
       #output {
@@ -45,7 +45,7 @@
       }
 
       #output * {
-	font-size: 26pt;
+        font-size: 26pt;
         text-align: justify-all;
         color: #466BB0;
       }
@@ -110,7 +110,7 @@
         var word = document.getElementById('word').value;
         var eolTimeout;
 
-	console.log(word);
+        console.log(word);
 
         if (word) {
           document.getElementById('chain').innerHTML = recentTagOpen + word + recentTagClose;
@@ -127,7 +127,7 @@
             window.clearTimeout(eolTimeout);
             total++;
 
-            eolTimeout = window.setTimeout(markEnd(total == max, total), 800);
+            eolTimeout = window.setTimeout(markEnd(total == max, total), 1200);
 
             var existing = document.getElementById('chain').innerHTML;
             var n = cleanTags(existing);

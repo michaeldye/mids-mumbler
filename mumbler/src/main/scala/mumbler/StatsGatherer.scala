@@ -81,7 +81,7 @@ class StatsCache(val sender: ActorRef, val cluster: Seq[ActorRef]) extends Stric
 						else r
 					})
 
-					logger.error(s"recent: ${recent}")
+					logger.debug(s"recent: ${recent}")
 					val existing = acc.getOrElse(k, Seq[StatsResult](recent))
 					acc + (k -> existing)
 				}
@@ -90,8 +90,6 @@ class StatsCache(val sender: ActorRef, val cluster: Seq[ActorRef]) extends Stric
 		})
 		SummaryOfMostRecent(summarized)
   }
-
-  // TODO: before finishing above, test that the reflection in statsresult works
 }
 
 object StatsCache {
@@ -115,8 +113,8 @@ trait SummaryJsonSupport extends akka.http.scaladsl.marshallers.sprayjson.SprayJ
 		override
 		def write(r: StatsResult): JsValue = r match {
 			case r: Indexed => JsObject(Map(
-				"total_source_bytes" -> JsNumber(r.totalSourceBytes),
-				"total_index_bytes" -> JsNumber(r.totalIndexBytes),
+				"total_processed" -> JsNumber(r.totalProcessed),
+				"total_indexed" -> JsNumber(r.totalIndexed),
 				"total_index_millis" -> JsNumber(r.totalIndexMillis),
 			))
 			case u: Any => throw new IllegalArgumentException(s"Unknown type to serialize: ${u}")
