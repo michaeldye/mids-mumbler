@@ -63,12 +63,15 @@
         margin: 0;
         padding: 0;
         list-style: none;
+        display: inline;
       }
 
       #stats li {
-        margin: 0;
+        margin-bottom: 0px;
+        margin-top: 0px;
         padding: 0;
         line-height: 0;
+        height: 30px;
       }
 
       #stats span {
@@ -164,15 +167,20 @@
         }
       }
 
+      function updateStatIfChanged(id, htmlValUpdate) {
+        const existing = document.getElementById(id).innerHTML;
+        if (existing != htmlValUpdate) {
+          document.getElementById(id).innerHTML = htmlValUpdate;
+        }
+      }
+
       function statsSocket() {
         const socket = new WebSocket(stats_uri);
 
         socket.addEventListener('message', function (event) {
-          var ret = JSON.parse(event.data);
+          const ret = JSON.parse(event.data);
 
-          document.getElementById('remotesStat').innerHTML = Object.keys(ret.remotes).length;
-
-          var agg= _.reduce(Object.values(ret.remotes), function(acc, next) {
+          const agg= _.reduce(Object.values(ret.remotes), function(acc, next) {
             if (_.isEmpty(acc)) {
               acc = next[0];
             } else {
@@ -184,11 +192,13 @@
             return acc;
           }, {});
 
-          document.getElementById('ngramsStat').innerHTML = agg.total_processed.toLocaleString();
-          document.getElementById('indexedStat').innerHTML = parseInt(agg.total_indexed).toLocaleString();
+          ngramStat = agg.total_processed.toLocaleString();
+          indexedStat = parseInt(agg.total_indexed).toLocaleString();
 
-          let seconds = parseInt(agg.total_index_millis) / 1000;
-          document.getElementById('indexedTimeStat').innerHTML = seconds;
+          updateStatIfChanged('remotesStat',  Object.keys(ret.remotes).length);
+          updateStatIfChanged('ngramsStat', parseInt(agg.total_processed).toLocaleString());
+          updateStatIfChanged('indexedStat', parseInt(agg.total_indexed).toLocaleString());
+          updateStatIfChanged('indexedTimeStat', parseFloat(parseInt(agg.total_index_millis) / 1000).toFixed(0));
 
         });
 
@@ -241,7 +251,7 @@
         <li>Number of active remote nodes: <span id="remotesStat">-</span></li>
         <li>Total N-grams processed: <span id="ngramsStat">-</span></li>
         <li>Total index entries: <span id="indexedStat">-</span></li>
-        <li>Total time spent indexing: <span id="indexedTimeStat">-</span> s</li>
+        <li>Total indexing time among nodes: <span id="indexedTimeStat">-</span> seconds</li>
       </ul>
     </div>
     <div id="input" style="margin-top: 2em;">
