@@ -1,6 +1,6 @@
 lazy val common = Seq(
   organization := "com.tehlulz",
-  version := "0.3.0-SNAPSHOT",
+  version := "0.4.0-SNAPSHOT",
   scalaVersion := "2.12.3",
   compileOrder := CompileOrder.JavaThenScala,
 	javaOptions in Test += s"-Dconfig.file=${sourceDirectory.value}/test/resources/application.conf",
