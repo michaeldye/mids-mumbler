@@ -56,10 +56,6 @@ object Launch extends App with StrictLogging {
 
   val filesCt = args(0).toInt
 
-  // TODO: replace this with immediate setup of API, show in UI some stats about total words indexed?
-  // (see API routes note for more info on that)
-
-  // TODO: send some data via WS to UI about the # of workers
   def callback(downloaded: Int): Unit = {
 
     if (downloaded != filesCt) logger.info(s"Processed ${downloaded}/${filesCt} by remotes")
@@ -83,7 +79,6 @@ class API(val bindAddress: String, val port: Int)(implicit val system: ActorSyst
   implicit val executionContext = system.dispatcher
 
 
-  // TODO: ??? add another route here to handle UI reporting # of workers, qty of data processed
   val route =
     path("chain" / IntNumber / "seed" / """\w+""".r) { (chainMax, word) =>
       get {

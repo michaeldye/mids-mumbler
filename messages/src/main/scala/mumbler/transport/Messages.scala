@@ -25,7 +25,14 @@ object Messages {
     val ts = System.currentTimeMillis
   }
 
-  case class Indexed(totalSourceBytes: Int, totalIndexBytes: Int, totalIndexMillis: Long) extends StatsResult
+  case class Indexed(totalProcessed: Int, totalIndexed: Int, totalIndexMillis: Long) extends StatsResult
+
+  object Indexed {
+    def empty(): Indexed = {
+      return new Indexed(0, 0, 0)
+    }
+
+  }
 
   case class StatsRequest() extends Message
   case class StatsResponse(result: Option[StatsResult]) extends Message

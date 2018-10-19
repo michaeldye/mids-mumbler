@@ -42,6 +42,7 @@ class ChainBuilder(val max: Int, val word: String)(implicit val remotes: Seq[Act
           if (chain.length == max) endChain(s"reached requested max chain length, $max", chain)
           else mum.all(Request(Mumble, chain))
 
+        // TODO: need to send an end-of-chain signal using onNext()
         case EndChain => endChain("no following words found", response.chain)
         case NotAllNodesReported => // continue
       }
@@ -53,7 +54,10 @@ class ChainBuilder(val max: Int, val word: String)(implicit val remotes: Seq[Act
     onCompleteThenStop()
   }
 
-  // a helper class from before we made the owning ActorPublisher that does some of this work
+  // TODO: this is not threadsafe and can also confuse multiple clients' chains; need to change the recording such that:
+  //    1. it records with chain as a key not an actor
+  //    2. it adds to a chain if some % of remotes have responded, not after all have
+
   class Mumbler(val sender: ActorRef, val cluster: ActorRef*) {
     var responseRecorder = Map[ActorRef, Option[Response]]()
 
