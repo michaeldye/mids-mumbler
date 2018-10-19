@@ -11,10 +11,12 @@ import mumbler.transport.Messages.Mumble
 import mumbler.transport.Messages.Request
 import mumbler.transport.Messages.Response
 
+import spray.json._
+
 /**
  * @author mdye
  */
-class ChainBuilder(val max: Int, val word: String)(implicit val remotes: Seq[ActorRef]) extends Actor with ActorPublisher[String] with ActorLogging {
+class ChainBuilder(val max: Int, val word: String)(implicit val remotes: Seq[ActorRef]) extends Actor with ActorPublisher[ChainStreamElement] with ActorLogging {
 
   val mum = new Mumbler(self, remotes: _*)
 
@@ -36,14 +38,16 @@ class ChainBuilder(val max: Int, val word: String)(implicit val remotes: Seq[Act
 
           // publish to consumers of this actorPublisher
           if (totalDemand > 0) {
-            onNext(word)
+            onNext(ChainStreamElement(word, false))
           }
 
           if (chain.length == max) endChain(s"reached requested max chain length, $max", chain)
           else mum.all(Request(Mumble, chain))
 
         // TODO: need to send an end-of-chain signal using onNext()
-        case EndChain => endChain("no following words found", response.chain)
+        case EndChain => {
+          endChain("no following words found", response.chain)
+        }
         case NotAllNodesReported => // continue
       }
   }
@@ -51,6 +55,7 @@ class ChainBuilder(val max: Int, val word: String)(implicit val remotes: Seq[Act
   def endChain(reason: String, chain: Seq[String]) {
     log.info(s"Exiting b/c ${reason}")
     log.info(s"Chain: ${chain.mkString(" ")}")
+    onNext(ChainStreamElement("EOL", true))
     onCompleteThenStop()
   }
 
@@ -119,3 +124,11 @@ sealed trait ChainResult
 case object EndChain extends ChainResult
 case object NotAllNodesReported extends ChainResult
 case class AddToChain(value: String) extends ChainResult
+
+case class ChainStreamElement(word: String, last: Boolean)
+
+trait ChainStreamElementJsonSupport extends akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport
+  with spray.json.DefaultJsonProtocol {
+
+  implicit val chainStreamElementFormat: JsonFormat[ChainStreamElement] = jsonFormat2(ChainStreamElement)
+}

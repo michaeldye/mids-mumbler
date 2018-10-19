@@ -70,7 +70,7 @@ object Launch extends App with StrictLogging {
 
 }
 
-class API(val bindAddress: String, val port: Int)(implicit val system: ActorSystem, implicit val remotes: Seq[ActorRef]) extends Directives with StrictLogging with SummaryJsonSupport {
+class API(val bindAddress: String, val port: Int)(implicit val system: ActorSystem, implicit val remotes: Seq[ActorRef]) extends Directives with StrictLogging with SummaryJsonSupport with ChainStreamElementJsonSupport {
 
 	implicit val jsonStreamingSupport: JsonEntityStreamingSupport = EntityStreamingSupport.json().withParallelMarshalling(parallelism = 8, unordered = false)
 
@@ -119,8 +119,9 @@ class API(val bindAddress: String, val port: Int)(implicit val system: ActorSyst
       import GraphDSL.Implicits._
 
       val feedSource = Source.actorPublisher(Props(new ChainBuilder(max, word)(remotes)))
+			val serializedSource = Flow[ChainStreamElement].map(_.toJson.toString)
       val messager = Flow[String].map(TextMessage(_))
-      val stream = feedSource ~> messager
+      val stream = feedSource.via(serializedSource) ~> messager
 
       SourceShape(stream.outlet)
     }

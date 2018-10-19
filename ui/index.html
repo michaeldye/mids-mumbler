@@ -6,6 +6,7 @@
     <title>Markov Chain Generator from N-gram Source Files</title>
     <!-- load MUI -->
     <link href="/ui/mui.min.css" rel="stylesheet" type="text/css" />
+    <script type="text/javascript" src="underscore-min.js"></script>
     <style>
       body {
         margin: 5em;
@@ -58,12 +59,30 @@
         color: #222;
       }
 
+      #stats ul {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+
+      #stats li {
+        margin: 0;
+        padding: 0;
+        line-height: 0;
+      }
+
+      #stats span {
+        font-weight: bold;
+      }
+
     </style>
     <script type="text/javascript">
       var loc = window.location, new_uri;
       new_uri = "ws://";
       new_uri += loc.host;
-      new_uri += "/chain";
+
+      word_uri = new_uri + "/chain";
+      stats_uri = new_uri + "/stats";
 
       var max = 20; // a default
 
@@ -106,7 +125,7 @@
         }
       }
 
-      function wsConnect() {
+      function wordSocket() {
         var word = document.getElementById('word').value;
         var eolTimeout;
 
@@ -118,22 +137,22 @@
           document.getElementById('tag').innerHTML = "";
           total = 1;
 
-          const socket = new WebSocket(new_uri + '/' + max + '/seed/' + word);
+          const socket = new WebSocket(word_uri + '/' + max + '/seed/' + word);
 
           socket.addEventListener('message', function (event) {
-            var word = event.data.toLowerCase();
+            var ret = JSON.parse(event.data);
+            var word = ret.word;
+            var eol = ret.last;
 
-
-            window.clearTimeout(eolTimeout);
             total++;
 
-            eolTimeout = window.setTimeout(markEnd(total == max, total), 1200);
-
-            var existing = document.getElementById('chain').innerHTML;
-            var n = cleanTags(existing);
-            document.getElementById('chain').innerHTML = n + ' ' + recentTagOpen + word + recentTagClose;
-            // document.getElementById('chain').innerHTML = existing + ' ' + event.data;
-
+            if (eol) {
+              markEnd(total == max, total)();
+            } else {
+              var existing = document.getElementById('chain').innerHTML;
+              var n = cleanTags(existing);
+              document.getElementById('chain').innerHTML = n + ' ' + recentTagOpen + word + recentTagClose;
+            }
           });
 
           socket.addEventListener('onclose', function (event) {
@@ -143,6 +162,41 @@
         } else {
           console.log('Skipping request because form field is empty');
         }
+      }
+
+      function statsSocket() {
+        const socket = new WebSocket(stats_uri);
+
+        socket.addEventListener('message', function (event) {
+          var ret = JSON.parse(event.data);
+
+          document.getElementById('remotesStat').innerHTML = Object.keys(ret.remotes).length;
+
+          var agg= _.reduce(Object.values(ret.remotes), function(acc, next) {
+            if (_.isEmpty(acc)) {
+              acc = next[0];
+            } else {
+              acc.total_index_millis += next[0].total_index_millis;
+              acc.total_indexed += next[0].total_indexed;
+              acc.total_processed += next[0].total_processed;
+            }
+
+            return acc;
+          }, {});
+
+          document.getElementById('ngramsStat').innerHTML = agg.total_processed.toLocaleString();
+          document.getElementById('indexedStat').innerHTML = parseInt(agg.total_indexed).toLocaleString();
+
+          let seconds = parseInt(agg.total_index_millis) / 1000;
+          document.getElementById('indexedTimeStat').innerHTML = seconds;
+
+        });
+
+        socket.addEventListener('onclose', function (event) {
+          console.log(socket.readState);
+          console.log("closed");
+        });
+
       }
 
       var seeds = [
@@ -162,33 +216,47 @@
       // run on load; TODO: cancel this when user moves mouse, set again after enough time has passed
 
     searchintervalVals = urlParams.getAll('searchinterval');
-    if (searchintervalVals.length > 0) {
+    if (searchintervalVals.length > 0 && searchintervalVals[0] > 200) {
 
       var autoSearch = window.setInterval(function() {
         var seed = seeds[Math.floor(Math.random() * (seeds.length - 0) + 0)];
         console.log("selected", seed);
         document.getElementById('word').value = seed;
-        wsConnect();
+        wordSocket();
       }, searchintervalVals[0])
+    } else {
+      console.log("No searchinterval specified");
     }
+
+    statsSocket();
+
     </script>
   </head>
   <body>
     <h2>Natural Language Processing with N-grams from English Literature</h2>
     <h3>IBM Watson and Cloud Platform / Applied Sciences Team</h3>
+    <hr />
+    <div id="stats" style="margin-top: 1em;">
+      <ul>
+        <li>Number of active remote nodes: <span id="remotesStat">-</span></li>
+        <li>Total N-grams processed: <span id="ngramsStat">-</span></li>
+        <li>Total index entries: <span id="indexedStat">-</span></li>
+        <li>Total time spent indexing: <span id="indexedTimeStat">-</span> s</li>
+      </ul>
+    </div>
     <div id="input" style="margin-top: 2em;">
       <form id="seed" class="mui-form" action="#">
         <div class="mui-textfield">
         <input name="word" id="word" placeholder="enter seed word" />
         </div>
-        <button onclick="event.preventDefault(); wsConnect();" class="mui-btn mui-btn--raised" autofocus>generate chain</button>
+        <button onclick="event.preventDefault(); wordSocket();" class="mui-btn mui-btn--raised" autofocus>generate chain</button>
       </form>
     </div>
     <div id="output" style="margin-top: 1.4em;">
       <p id="chain"></p>
       <p id="tag"></p>
     </div>
-<hr />
+    <hr />
     <div id="description" style="margin-top: 1em;">
       <p>This demonstration uses Akka remote actors to fetch N-gram source files produced from 6% of all published English language literature as of 2009. The N-gram source files are then processed into indices and stored on worker nodes.</p>
       <p>While processing, the <em>head</em> node will accept a <em>seed</em> word as input and generate a Markov Chain of following words, selecting them from the indexed data weighted by occurrence frequency in the corpus. A chain is built by appending successive words provided by worker nodes until a maximum word chain limit is reached. The process is then repeated with a new word.</p>
