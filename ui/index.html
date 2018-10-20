@@ -7,6 +7,7 @@
     <!-- load MUI -->
     <link href="/ui/mui.min.css" rel="stylesheet" type="text/css" />
     <script type="text/javascript" src="underscore-min.js"></script>
+    <script type="text/javascript" src="countUp.js"></script>
     <style>
       body {
         margin: 5em;
@@ -17,7 +18,6 @@
         color: #555;
         font-family: 'Helvetica Neue', 'Open Sans', Arial, sans-serif;
         font-size: 16pt;
-        line-height: 30pt;
       }
 
       h2 {
@@ -63,15 +63,15 @@
         margin: 0;
         padding: 0;
         list-style: none;
+        display: inline;
       }
 
-      #stats li {
-        margin: 0;
-        padding: 0;
-        line-height: 0;
+      #stats ul * {
+        color: #777;
       }
 
-      #stats span {
+      #stats span.rt, #stats span.rt span.hv {
+        color: #222;
         font-weight: bold;
       }
 
@@ -144,8 +144,6 @@
             var word = ret.word;
             var eol = ret.last;
 
-            total++;
-
             if (eol) {
               markEnd(total == max, total)();
             } else {
@@ -153,6 +151,9 @@
               var n = cleanTags(existing);
               document.getElementById('chain').innerHTML = n + ' ' + recentTagOpen + word + recentTagClose;
             }
+
+            total++;
+
           });
 
           socket.addEventListener('onclose', function (event) {
@@ -164,15 +165,60 @@
         }
       }
 
+      function updateStat(id, htmlValUpdate) {
+        const formatted = htmlValUpdate.toLocaleString();
+        document.getElementById(id).innerHTML = formatted;
+      }
+
+      function animateUpdateStat(id, prevVal, newVal) {
+				var easingFn = function(t, b, c, d) {
+				var ts = (t /= d) * t;
+				var tc = ts * t;
+				return b + c * (tc + -3 * ts + 3 * t);
+				}
+				var options = {
+				  useEasing: true,
+				  easingFn: easingFn,
+				  useGrouping: true,
+				  separator: ',',
+				  decimal: '.',
+				};
+
+				const oldVal = (_.isUndefined(prevVal)) ? 0 : prevVal;
+
+				var indexedStatUpdate = new CountUp(id, oldVal, newVal, 0, 2.0, options);
+				if (!indexedStatUpdate.error) {
+				  indexedStatUpdate.start();
+				} else {
+				  console.error(indexedStatUpdate.error);
+				}
+
+      }
+
+      function statsObj(remotesCount, totalIndexSeconds, totalIndexed, indexedRate, totalProcessed, ngramsRate) {
+        return {
+          "remotesCount": remotesCount,
+          "totalIndexSeconds": totalIndexSeconds,
+          "totalIndexed": totalIndexed,
+					"indexedRate": indexedRate,
+          "totalProcessed": totalProcessed,
+					"ngramsRate": ngramsRate
+        };
+      }
+
+      function fixedFloatToInt(val) {
+        return parseInt(parseFloat(val).toFixed(0));
+      }
+
       function statsSocket() {
+        var prevStats = {};
+
         const socket = new WebSocket(stats_uri);
 
         socket.addEventListener('message', function (event) {
-          var ret = JSON.parse(event.data);
+          const ret = JSON.parse(event.data);
 
-          document.getElementById('remotesStat').innerHTML = Object.keys(ret.remotes).length;
-
-          var agg= _.reduce(Object.values(ret.remotes), function(acc, next) {
+          const aggregated = _.reduce(Object.values(ret.remotes), function(acc, next) {
             if (_.isEmpty(acc)) {
               acc = next[0];
             } else {
@@ -184,12 +230,34 @@
             return acc;
           }, {});
 
-          document.getElementById('ngramsStat').innerHTML = agg.total_processed.toLocaleString();
-          document.getElementById('indexedStat').innerHTML = parseInt(agg.total_indexed).toLocaleString();
+					const processingTime = (aggregated.total_index_millis != 0) ? fixedFloatToInt(aggregated.total_index_millis / 1000) : 0;
 
-          let seconds = parseInt(agg.total_index_millis) / 1000;
-          document.getElementById('indexedTimeStat').innerHTML = seconds;
+          const stats = statsObj(Object.keys(ret.remotes).length,
+						processingTime,
+						aggregated.total_indexed,
+						fixedFloatToInt( (processingTime != 0) ? (aggregated.total_indexed / processingTime) : 0),
+						aggregated.total_processed,
+						fixedFloatToInt( (processingTime != 0) ? (aggregated.total_processed / processingTime) : 0));
 
+          if (_.isEqual(prevStats, stats)) {
+            // do nothing, no change
+            console.log("received stats data: no updates so leaving DOM alone");
+          } else {
+            console.log("received stats data: updates exist so modifying DOM");
+
+            updateStat('remotesStat', stats.remotesCount);
+
+            if (stats.totalIndexMillis != 0) {
+							animateUpdateStat('ngramsRate', prevStats.ngramsRate, stats.ngramsRate);
+							animateUpdateStat('indexedRate', prevStats.indexedRate, stats.indexedRate);
+            }
+
+            animateUpdateStat('processingTime', prevStats.totalIndexSeconds, processingTime);
+            animateUpdateStat('ngramsStat', prevStats.totalProcessed, stats.totalProcessed);
+            animateUpdateStat('indexedStat', prevStats.totalIndexed, stats.totalIndexed);
+
+            prevStats = stats;
+          }
         });
 
         socket.addEventListener('onclose', function (event) {
@@ -238,10 +306,10 @@
     <hr />
     <div id="stats" style="margin-top: 1em;">
       <ul>
-        <li>Number of active remote nodes: <span id="remotesStat">-</span></li>
-        <li>Total N-grams processed: <span id="ngramsStat">-</span></li>
-        <li>Total index entries: <span id="indexedStat">-</span></li>
-        <li>Total time spent indexing: <span id="indexedTimeStat">-</span> s</li>
+        <li>Number of active remote nodes: <span id="remotesStat" class="hv">-</span></li>
+        <li>Total processing time among nodes: <span id="processingTime" class="hv">-</span>s</li>
+        <li>N-gram processing rate: <span class="rt"><span id="ngramsRate" class="hv">-</span> lines/s</span>; total lines: <span id="ngramsStat">-</span></li>
+        <li>Indexing rate: <span class="rt"><span id="indexedRate" class="hv">-</span> entries/s</span>; total entries: <span id="indexedStat">-</span></li>
       </ul>
     </div>
     <div id="input" style="margin-top: 2em;">
@@ -249,7 +317,7 @@
         <div class="mui-textfield">
         <input name="word" id="word" placeholder="enter seed word" />
         </div>
-        <button onclick="event.preventDefault(); wordSocket();" class="mui-btn mui-btn--raised" autofocus>generate chain</button>
+        <button id="querySubmit" onclick="event.preventDefault(); wordSocket();" class="mui-btn mui-btn--raised" autofocus>generate chain</button>
       </form>
     </div>
     <div id="output" style="margin-top: 1.4em;">
@@ -258,9 +326,9 @@
     </div>
     <hr />
     <div id="description" style="margin-top: 1em;">
-      <p>This demonstration uses Akka remote actors to fetch N-gram source files produced from 6% of all published English language literature as of 2009. The N-gram source files are then processed into indices and stored on worker nodes.</p>
-      <p>While processing, the <em>head</em> node will accept a <em>seed</em> word as input and generate a Markov Chain of following words, selecting them from the indexed data weighted by occurrence frequency in the corpus. A chain is built by appending successive words provided by worker nodes until a maximum word chain limit is reached. The process is then repeated with a new word.</p>
-      <p>When a remote actor is queried to provide a list of following words given an antecedent, it processes a local copy of English language literary texts and returns a the list of words along with the frequency of their occurrence in the corpus. The head node selects a following word at random but weighted by the frequency of occurence of the following word.</p>
+      <p>This demonstration uses Akka remote actors to fetch N-gram source files produced from 6% of all published English language literature as of 2009. The N-gram source files are then processed into indices and stored on remote nodes.</p>
+      <p>While processing, the <em>head</em> node will accept a <em>seed</em> word as input and generate a Markov Chain of successor words, selecting each from the indexed data weighted by occurrence frequency in the corpus. A chain is built by appending succeeding words provided by remote nodes until a maximum word chain limit is reached. The process is then repeated with a new word.</p>
+      <p>When a remote actor is queried to provide a list of succeeding words given an antecedent, it processes a local copy of English language literary texts and returns a the list of words along with the frequency of their occurrence in the corpus. The head node selects a succeeding word at random but weighted by the frequency of occurence of that word.</p>
     </div>
   </body>
 </html>
