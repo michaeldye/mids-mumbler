@@ -6,7 +6,7 @@ Akka-based implementation of a Markov chain generator from Google n-gram data se
 
 ### Preconditions
 
-* Obtain a recent version of SBT (as of this writing, v.1.0.2 on Linux was used, it was fetch from http://www.scala-sbt.org/download.html)
+* Obtain a recent version of SBT (as of this writing, v.1.0.2 on Linux was used, it was fetched from http://www.scala-sbt.org/download.html)
 * Configure network connectivity between each box that will host the system and ensure that the configured hostnames are resolvable (see example invocation below for use of ports and hostnames given at invocation)
 
 ### Steps
